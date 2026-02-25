@@ -40,13 +40,128 @@ function buildBlockDecorations(state: EditorState): DecorationSet {
     
     // Create regex based on settings, escaping special characters
     const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Capture color: ::> color
-    const startRegex = new RegExp(`^${escapeRegExp(startMarker)}\\s*(.*)$`);
+    
+    // Strict syntax: marker + optional space + color + NO more spaces inside color (to avoid matching tags or sentences)
+    // But user wants:
+    // 1. ::>blue (no space)
+    // 2. ::> blue (space)
+    // 3. ::> bg-red (unrecognized color -> default)
+    // And NO space AFTER the color to avoid matching tags?
+    // User said: "Don't add space, because #color might be mistaken for tag."
+    // Actually, user said: "I suggest not adding space [in the command/default insertion?], because if there is space, #color might be mistaken for tag. Just write immediately after. [And] ignore ones with spaces."
+    
+    // Let's refine the regex:
+    // It should match `^MARKER\s*(COLOR_STRING)$`
+    // If COLOR_STRING is empty, default color.
+    // If COLOR_STRING is invalid, CSS variable fallback handles it (it just won't render color, or we can detect it).
+    // Actually, CSS variable with invalid value might be transparent or inherit.
+    
+    // Capture group 1 is the color part.
+    // Use non-greedy match for color to avoid trailing spaces
+    // The previous regex `\s*(.*)$` allowed spaces inside the capture group and then we trimmed.
+    // But user wants `::> blue` (space separator) -> color "blue"
+    // `::>blue` (no space) -> color "blue"
+    // `::>bg-blue` (no space) -> color "bg-blue" (invalid -> default)
+    // `::> #0000ff` (space) -> color "#0000ff"
+    // `::>#0000ff` (no space) -> color "#0000ff"
+    
+    // BUT user said: `::>bg-blue` should be default.
+    // Currently `normalizeColor` handles invalid CSS color "bg-blue" by returning defaultColor.
+    // The only issue is `::>blue` vs `::> blue`.
+    
+    // The issue with the previous implementation was that `\s*` consumed the space, 
+    // and `(.*)` captured the rest. `trim()` removed extra spaces.
+    // BUT `normalizeColor` rejected if `c.includes(' ')`.
+    // If user typed `::> blue`, match[1] is "blue". trim() is "blue". includes(' ') is false. Valid.
+    // If user typed `::>blue`, match[1] is "blue". trim() is "blue". includes(' ') is false. Valid.
+    // If user typed `::>bg-blue`, match[1] is "bg-blue". Valid string, but `CSS.supports` rejects it. Returns default. Correct.
+    
+    // The user claimed `::>bg-blue` was "default color" in his test, which is correct behavior.
+    // The user claimed `::> blue` was "default color" in his test. Wait.
+    // If `::> blue` became default color, it means `normalizeColor` returned default.
+    // Why? "blue" is valid CSS.
+    // Maybe `startMatch[1]` contained a space?
+    // Regex: `^::>\s*(.*)$`
+    // Text: `::> blue`
+    // `\s*` matches " ". `(.*)` matches "blue".
+    // `startMatch[1]` is "blue". `trim()` is "blue".
+    // Should work.
+    
+    // Unless the regex engine behavior with `\s*` and `(.*)` captured the space into group 1?
+    // `\s*` is greedy? No.
+    // Actually, let's make it explicit.
+    // We want to capture the color string.
+    
+    // User requirement: "Don't add space, because #color might be mistaken for tag."
+    // User meant: "I advise against using space as separator... but if I do use space, treat it as separator."
+    
+    // Let's change regex to: `^MARKER( ?)(.*)$`
+    // Group 1: optional space. Group 2: color.
+    
+    // Actually, the user's report that `::> blue` -> default color is strange if my previous logic was correct.
+    // Let's look at `c.includes(' ')`.
+    // If `startMatch[1]` was " blue" (leading space), `trim()` fixes it.
+    
+    // WAIT. User said: "::> blue" -> Default Color.
+    // This implies `normalizeColor("blue")` failed or `startMatch` failed?
+    // If `::> blue` works, it should be blue.
+    // Maybe the user's previous test was with a version where I disallowed spaces completely?
+    // In previous turn I added `if (c.includes(' ')) return default`.
+    // "blue" does not include space.
+    
+    // Maybe the issue is `::>bg-blue`?
+    // "bg-blue" is invalid CSS. Returns default. Correct.
+    
+    // Maybe the user wants to ENFORCE no space separator?
+    // "::>blue" -> blue
+    // "::> blue" -> invalid (default) ??
+    // User said: "::> blue" -> "默认色" (Default color).
+    // This means he WANTS "::> blue" to fail? Or he observed it failed?
+    // He listed it as an example of what happened or what he wants?
+    // "你这个规则还是没有完全按照我想的，我现在举几个例子，你来理解一下"
+    // "::>blue" -> 蓝色 (Correct)
+    // "::> blue" -> 默认色 (He wants this to be default/invalid? Or he observed it?)
+    // Context: "另外语法上面，我建议不要加空格了... 带空格的就全都不认就好。"
+    // YES. He wants "::> blue" (with space) to be INVALID (Default color).
+    // He wants to ban the space separator.
+    
+    // So Regex should NOT allow space between marker and color.
+    // Regex: `^MARKER(.*)$`
+    // And `(.*)` must NOT start with space.
+    // Actually, if we just capture `(.*)`, and if it starts with space, we treat as invalid.
+    
+    const startRegex = new RegExp(`^${escapeRegExp(startMarker)}(.*)$`);
     const endRegex = new RegExp(`^${escapeRegExp(endMarker)}\\s*$`);
 
     const blocks: {start: number, end: number, color: string}[] = [];
     let currentStart = -1;
     let currentColor = "";
+
+    // Helper to validate/normalize color
+    const normalizeColor = (raw: string): string => {
+        // We do NOT trim initially to detect leading spaces.
+        // User wants `::> blue` (with leading space) to be INVALID (Default Color).
+        // Only `::>blue` (no leading space) is valid.
+        
+        // 1. If empty, use default color setting
+        if (!raw) return pluginInstance.settings.defaultColor;
+
+        // 2. If starts with space, treat as invalid -> default color
+        // This enforces NO space separator.
+        if (raw.startsWith(' ')) return pluginInstance.settings.defaultColor;
+
+        const c = raw.trim(); // Now we can trim trailing spaces if any
+
+        // 3. If contains spaces (e.g. "bg blue"), treat as invalid -> default color
+        if (c.includes(' ')) return pluginInstance.settings.defaultColor;
+
+        // 4. Check validity using CSS.supports
+        if (window.CSS && window.CSS.supports && !window.CSS.supports('color', c)) {
+            return pluginInstance.settings.defaultColor;
+        }
+
+        return c;
+    };
 
     for (let i = 1; i <= doc.lines; i++) {
         const line = doc.line(i);
@@ -55,7 +170,7 @@ function buildBlockDecorations(state: EditorState): DecorationSet {
 
         if (startMatch) {
             currentStart = i;
-            currentColor = (startMatch[1] ? startMatch[1].trim() : "") || "var(--text-normal)";
+            currentColor = normalizeColor(startMatch[1] || "");
         } else if (endMatch && currentStart !== -1) {
             blocks.push({ start: currentStart, end: i, color: currentColor });
             currentStart = -1;
@@ -242,18 +357,23 @@ export default class MyBlockPlugin extends Plugin {
             editor.replaceRange('', { line: endLine, ch: 0 }, { line: endLine + 1, ch: 0 });
             editor.replaceRange('', { line: startLine, ch: 0 }, { line: startLine + 1, ch: 0 });
         } else {
-            // Add block (default color blue if not specified, but user didn't specify default)
-            // We use 'blue' as a sensible default if user just toggles.
-            const defaultColor = "blue"; 
+            // Add block
+            // Use configured default color or just empty to let it use default from logic
+            // User said: "default color is text #999"
+            // If we write just "::>" without color, normalizeColor picks defaultColor.
+            // So we can write just the marker.
+            // Or we can write the defaultColor explicitly?
+            // Usually cleaner to write just the marker if it implies default.
+            // But let's write just the marker.
             
             const selection = editor.getSelection();
             if (selection) {
-                const newText = `${startMarker} ${defaultColor}\n${selection}\n${endMarker}\n`;
+                const newText = `${startMarker}\n${selection}\n${endMarker}\n`;
                 editor.replaceSelection(newText);
             } else {
                 const lineContent = editor.getLine(cursor.line);
                 editor.replaceRange(
-                    `${startMarker} ${defaultColor}\n${lineContent}\n${endMarker}\n`,
+                    `${startMarker}\n${lineContent}\n${endMarker}\n`,
                     { line: cursor.line, ch: 0 },
                     { line: cursor.line + 1, ch: 0 }
                 );
@@ -279,7 +399,7 @@ export default class MyBlockPlugin extends Plugin {
         const endMarker = this.settings.blockEndMarker;
         
         const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const startRegex = new RegExp(`^${escapeRegExp(startMarker)}\\s*(.*)$`);
+        const startRegex = new RegExp(`^${escapeRegExp(startMarker)}(.*)$`);
         const endRegex = new RegExp(`^${escapeRegExp(endMarker)}\\s*$`);
 
         // We need to find the "Active" block for this element.
@@ -292,6 +412,28 @@ export default class MyBlockPlugin extends Plugin {
         let currentStart = -1;
         let currentColor = "";
 
+        // Helper to validate/normalize color
+        const normalizeColor = (raw: string): string => {
+            // We do NOT trim initially to detect leading spaces.
+            if (!raw) return pluginInstance.settings.defaultColor;
+
+            // 2. If starts with space, treat as invalid -> default color
+            // This enforces NO space separator.
+            if (raw.startsWith(' ')) return pluginInstance.settings.defaultColor;
+
+            const c = raw.trim(); // Now we can trim trailing spaces if any
+
+            // 3. If contains spaces (e.g. "bg blue"), treat as invalid -> default color
+            if (c.includes(' ')) return pluginInstance.settings.defaultColor;
+
+            // 4. Check validity using CSS.supports
+            if (window.CSS && window.CSS.supports && !window.CSS.supports('color', c)) {
+                return pluginInstance.settings.defaultColor;
+            }
+
+            return c;
+        };
+
         // Scan all lines to build block map
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -301,7 +443,7 @@ export default class MyBlockPlugin extends Plugin {
 
             if (startMatch) {
                 currentStart = i;
-                currentColor = (startMatch[1] ? startMatch[1].trim() : "") || "var(--text-normal)";
+                currentColor = normalizeColor(startMatch[1] || "");
             } else if (endMatch && currentStart !== -1) {
                 blocks.push({ start: currentStart, end: i, color: currentColor });
                 currentStart = -1;

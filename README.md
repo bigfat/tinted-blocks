@@ -17,27 +17,27 @@
 ## 🚀 How to Use
 
 ### Method 1: The "Hacker" Way (Typing)
-Simply type the start marker followed by a color, write your content, and close with the end marker.
+Simply type the start marker followed immediately by a color, write your content, and close with the end marker.
 
 ```markdown
-::> blue
+::>blue
 This is a blue block.
 It supports **Markdown** formatting.
 <::
 ```
 
-You can use any color format:
-- `::> red` (Standard CSS names)
-- `::> #4caf50` (Hex codes)
-- `::> rgb(100, 200, 255)` (RGB values)
+You can use any color format, but **do not add a space** after the marker:
+- `::>red` (Standard CSS names)
+- `::>#4caf50` (Hex codes)
+- `::>rgb(100,200,255)` (RGB values)
 
-If you omit the color (e.g., just `::>`), it defaults to your theme's text color.
+If you omit the color (e.g., just `::>`) or type an invalid color (e.g., `::> invalid` or `::> bg-red`), it defaults to your configured **Default Block Color**.
 
 ### Method 2: The "Mouse" Way (Context Menu)
 1. Select any text in your editor.
 2. **Right-click** on the selection.
 3. Choose **Toggle block highlight**.
-4. A default block (blue) will wrap your selection instantly.
+4. A default block (using your default color setting) will wrap your selection instantly.
 
 ### Method 3: The "Pro" Way (Hotkeys)
 Speed up your workflow by assigning a custom hotkey!
@@ -51,11 +51,10 @@ Speed up your workflow by assigning a custom hotkey!
 
 ## ⚙️ Customization
 
-Don't like the default `::>` syntax? You can change it!
-
 Go to **Settings** -> **Tinted Blocks** to configure:
 - **Block Start Marker**: Default is `::>`.
 - **Block End Marker**: Default is `<::`.
+- **Default Block Color**: Choose the color used when no specific color is provided (defaults to `#555555`).
 - **Inline Marker**: Default is `::` (for inline highlights like `::text::`).
 
 ---
