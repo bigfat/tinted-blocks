@@ -606,7 +606,11 @@ export default class MyBlockPlugin extends Plugin {
             }
         }
         
-        // Post-processing: If the element is now effectively empty (only contains <br> or whitespace), hide it?
+        // Remove any leading <br> tags immediately following the removed text
+        // Use recursive helper to find the <br> even if it's inside a <p> or <span>
+        this.removeLeadingBR(element);
+         
+         // Post-processing: If the element is now effectively empty (only contains <br> or whitespace), hide it?
         // Or if the start marker was on its own line, we might have a leftover <br> or empty <p>.
         
         // Check if the element has any visible content left.
@@ -694,6 +698,32 @@ export default class MyBlockPlugin extends Plugin {
                  prev.classList.add('tinted-block-item-end');
              }
         }
+    }
+
+    removeLeadingBR(element: Node): boolean {
+        // Returns true if we should stop (found text or removed BR)
+        const children = Array.from(element.childNodes);
+        for (const child of children) {
+            if (child.nodeType === Node.TEXT_NODE) {
+                if (child.textContent && child.textContent.replace(/\u200B/g, '').trim().length > 0) {
+                    return true; // Found text, stop
+                }
+                // Whitespace text, ignore and continue
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const el = child as HTMLElement;
+                if (el.tagName === 'BR') {
+                    // Found it!
+                    console.log(`[Tinted Blocks] Removing phantom <br> in`, el.parentElement);
+                    el.remove();
+                    return true; // Done
+                }
+                // Recurse into other elements (like p, span, strong)
+                if (this.removeLeadingBR(el)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     processInlineHighlight(element: HTMLElement) {
