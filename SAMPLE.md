@@ -79,3 +79,16 @@ You can mix inline highlights inside tinted blocks!
 Here is some text with a ::g:green highlight:: inside a dark block.
 And here is a ::r:red warning::.
 <::
+
+### Code Conflict Test
+
+The plugin should NOT highlight text inside inline code or code blocks.
+
+- Inline Code: `::>color` and `<::` should render as code, not highlights.
+- Code Block:
+  ```
+  ::>red
+  This should not be highlighted.
+  <::
+  ```
+- Inline highlight inside code: `::text::`

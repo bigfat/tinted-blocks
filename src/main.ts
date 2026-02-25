@@ -1,6 +1,7 @@
 import { Plugin, MarkdownPostProcessorContext, Editor, Menu, MarkdownView } from 'obsidian';
 import { RangeSetBuilder, StateField, Transaction, EditorState } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, MatchDecorator, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import { syntaxTree } from '@codemirror/language';
 import { MyPluginSettings, DEFAULT_SETTINGS, TintedBlocksSettingTab } from './settings';
 
 // Global reference to the plugin instance to access settings from StateFields
@@ -33,7 +34,7 @@ function buildBlockDecorations(state: EditorState): DecorationSet {
     const doc = state.doc;
     const selection = state.selection.main;
     
-    if (!pluginInstance) return builder.finish();
+    if (!pluginInstance || !pluginInstance.settings.enableBlockHighlight) return builder.finish();
 
     const startMarker = pluginInstance.settings.blockStartMarker;
     const endMarker = pluginInstance.settings.blockEndMarker;
@@ -235,6 +236,8 @@ function createInlineHighlighter() {
 
         buildDecorations(view: EditorView): DecorationSet {
             const builder = new RangeSetBuilder<Decoration>();
+            if (pluginInstance && !pluginInstance.settings.enableInlineHighlight) return builder.finish();
+
             const { state } = view;
             const doc = state.doc;
             const selection = state.selection.main;
@@ -244,7 +247,7 @@ function createInlineHighlighter() {
             const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             
             // Regex: ::(?:([rgby]):)?(.*?)::
-            // Matches: ::r:content:: or ::content::
+            // Matches: ::r:text:: or ::text::
             // Group 1: color code (r,g,b,y) or undefined
             // Group 2: content
             const regex = new RegExp(`${escapedMarker}(?:([rgby]):)?(.*?)${escapedMarker}`, 'g');
@@ -258,6 +261,20 @@ function createInlineHighlighter() {
                     const matchStart = from + match.index;
                     const fullMatch = match[0];
                     const matchEnd = matchStart + fullMatch.length;
+
+                    // Check if inside code block/inline code
+                    const tree = syntaxTree(state);
+                    // Resolve at start + 1 to be safely inside the match (in case match starts at boundary)
+                    // But if match is `::...` inside `...` it should be fine.
+                    // Resolving at matchStart is usually enough if the node covers it.
+                    // But for inline code `...` the backtick is separate node usually.
+                    // Let's check the middle of the match to be safe?
+                    // Or check start.
+                    const node = tree.resolveInner(matchStart + 1, -1);
+                    const nodeName = node.type.name;
+                    if (nodeName.includes("code") || nodeName.includes("Code") || nodeName.includes("math")) {
+                        continue;
+                    }
                     
                     const colorCode = match[1]; // r, g, b, y or undefined
                     const content = match[2] || "";
@@ -359,6 +376,7 @@ export default class MyBlockPlugin extends Plugin {
         this.addCommand({
             id: 'toggle-block-highlight',
             name: 'Tint block',
+            hotkeys: [{ modifiers: ["Mod", "Shift"], key: "'" }],
             editorCallback: (editor: Editor, view: MarkdownView) => {
                 this.toggleBlockHighlight(editor);
             }
@@ -367,6 +385,7 @@ export default class MyBlockPlugin extends Plugin {
         this.addCommand({
             id: 'toggle-inline-highlight',
             name: 'Highlight text',
+            hotkeys: [{ modifiers: ["Mod", "Shift"], key: "b" }],
             editorCallback: (editor: Editor, view: MarkdownView) => {
                 this.toggleInlineHighlight(editor);
             }
@@ -746,9 +765,13 @@ export default class MyBlockPlugin extends Plugin {
         // console.log(`[Tinted Blocks] PostProcessor called at ${new Date().toISOString()}`);
         
         // 1. Inline Highlight
-        this.processInlineHighlight(element);
+        if (this.settings.enableInlineHighlight) {
+            this.processInlineHighlight(element);
+        }
 
         // 2. Block Highlight (Reading View)
+        if (!this.settings.enableBlockHighlight) return;
+        
         // Mark elements and queue wrapping
         
         const startMarker = this.settings.blockStartMarker;
@@ -957,6 +980,12 @@ export default class MyBlockPlugin extends Plugin {
         const nodesToReplace: {node: Text, matches: RegExpMatchArray[]}[] = [];
         
         while (node = walker.nextNode()) {
+            // Skip if inside code block or inline code
+            const parent = node.parentElement;
+            if (parent && (parent.tagName === 'CODE' || parent.tagName === 'PRE' || parent.closest('code') || parent.closest('pre'))) {
+                continue;
+            }
+
             if (node.nodeType === Node.TEXT_NODE) {
                  const text = node.textContent || "";
                  // Use matchAll to find all occurrences if supported, or loop with exec
