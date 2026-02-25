@@ -186,5 +186,137 @@
     padding-left: 20px !important; /* Ensure bullets are visible */
 }
 
-/* Cleanup old preview styles if no longer used */
-/* .tinted-block-preview ... removed */
+/* =========================================
+   Inline Highlighting
+   ========================================= */
+
+/* Base inline highlight class (default state, hidden markers) */
+.tinted-inline {
+    border-radius: 4px;
+    padding: 0 4px; /* Horizontal padding for standalone content */
+    
+    /* Ensure line-height doesn't break layout but allows background to show */
+    line-height: 1.4;
+    display: inline;
+    
+    /* Box decoration break ensures background wraps correctly across lines */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+}
+
+/* 
+   Content part of the inline highlight when markers are visible
+   Needs to connect visually with markers
+*/
+.tinted-inline-content {
+    /* No border radius on sides where markers attach */
+    border-radius: 0;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+/* 
+   Markers 
+   These are the ::r: and :: parts.
+   They should look like they are part of the same block.
+*/
+.tinted-inline-marker {
+    /* Text color is faint - Direct transparency override */
+    /* Using !important to force override of parent color inheritance */
+    color: rgba(0, 0, 0, 0.3) !important; 
+    
+    /* Dark mode override via media query or theme class if possible, 
+       but standard Obsidian approach is using --text-faint which handles themes.
+       Let's trust --text-faint first, if not working, use specific opacity on color.
+    */
+    
+    /* If --text-faint is not faint enough, we force a transparent color. */
+    /* The problem with color-mix might be browser support or variable resolution. */
+    
+    /* Let's try opacity on the element itself, but compensate for background? */
+    /* No, opacity on element fades background. */
+    
+    /* Solution: Use text-fill-color if supported (standard in WebKit/Chrome/Electron) */
+    -webkit-text-fill-color: rgba(0, 0, 0, 0.33) !important; /* 67% transparent black */
+    
+    /* For dark mode support, we need white with transparency */
+    /* We can use CSS variable for base color */
+}
+
+/* Theme-specific adjustments */
+.theme-dark .tinted-inline-marker {
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.33) !important;
+}
+
+.theme-light .tinted-inline-marker {
+    -webkit-text-fill-color: rgba(0, 0, 0, 0.33) !important;
+}
+
+/* Common properties */
+.tinted-inline-marker {
+    font-size: inherit !important;
+    vertical-align: baseline;
+    padding-top: 0; 
+    padding-bottom: 0;
+    line-height: inherit;
+}
+
+/* Start Marker (Left side) */
+.tinted-inline-start {
+    /* Rounded left, square right */
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    
+    padding-left: 4px; /* Left padding for the block */
+    padding-right: 2px;
+    
+    /* Remove right margin to touch content */
+    margin-right: -1px; 
+}
+
+/* End Marker (Right side) */
+.tinted-inline-end {
+    /* Rounded right, square left */
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    
+    padding-right: 4px; /* Right padding for the block */
+    padding-left: 2px;
+    
+    /* Remove left margin to touch content */
+    margin-left: -1px;
+}
+
+/* When markers are hidden, the content needs full rounded corners */
+/* We can't easily select "content without markers" via CSS class alone unless we add a specific class for that case. 
+   But currently the content has .tinted-inline AND color class.
+   The markers have .tinted-inline-marker AND color class.
+*/
+
+/* Colors - Highlighter style (Neon/Fluorescent) */
+/* We use !important to ensure it overrides default text colors if needed */
+.tinted-inline-red {
+    background-color: #ffb3b3 !important; /* Light Red/Pink */
+    color: #000000 !important;
+}
+.tinted-inline-green {
+    background-color: #b3ffb3 !important; /* Light Green */
+    color: #000000 !important;
+}
+.tinted-inline-blue {
+    background-color: #b3d9ff !important; /* Light Blue */
+    color: #000000 !important;
+}
+.tinted-inline-yellow {
+    background-color: #ffffb3 !important; /* Light Yellow */
+    color: #000000 !important;
+}
+
+/* Visible marker (when cursor inside) - No opacity on background! */
+.tinted-inline-visible {
+    /* opacity: 0.67 !important; REMOVED to keep background consistent */
+}

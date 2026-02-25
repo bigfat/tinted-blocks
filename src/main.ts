@@ -217,27 +217,116 @@ const blockHighlighter = StateField.define<DecorationSet>({
 // ============================================================
 // 2. 行内高亮 (Inline)
 // ============================================================
-const inlineMark = Decoration.mark({ class: "custom-inline-highlight" });
 
 // Helper to create the ViewPlugin with current settings
 function createInlineHighlighter() {
     return ViewPlugin.fromClass(class {
-        decorator: MatchDecorator;
         decorations: DecorationSet;
+        
         constructor(view: EditorView) {
+            this.decorations = this.buildDecorations(view);
+        }
+
+        update(update: ViewUpdate) {
+            if (update.docChanged || update.viewportChanged || update.selectionSet) {
+                this.decorations = this.buildDecorations(update.view);
+            }
+        }
+
+        buildDecorations(view: EditorView): DecorationSet {
+            const builder = new RangeSetBuilder<Decoration>();
+            const { state } = view;
+            const doc = state.doc;
+            const selection = state.selection.main;
+            
+            // Marker configuration
             const marker = pluginInstance ? pluginInstance.settings.inlineMarker : '::';
             const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            // Regex to match content between markers: ::content::
-            // Use non-greedy match .*?
-            const regex = new RegExp(`${escapedMarker}(.*?)${escapedMarker}`, 'g');
             
-            this.decorator = new MatchDecorator({ regexp: regex, decoration: inlineMark });
-            this.decorations = this.decorator.createDeco(view);
-        }
-        update(update: ViewUpdate) {
-            if (update.docChanged || update.viewportChanged) {
-                this.decorations = this.decorator.updateDeco(update, this.decorations);
+            // Regex: ::(?:([rgby]):)?(.*?)::
+            // Matches: ::r:content:: or ::content::
+            // Group 1: color code (r,g,b,y) or undefined
+            // Group 2: content
+            const regex = new RegExp(`${escapedMarker}(?:([rgby]):)?(.*?)${escapedMarker}`, 'g');
+            
+            // Iterate over visible ranges for performance
+            for (const { from, to } of view.visibleRanges) {
+                const rangeText = doc.sliceString(from, to);
+                let match;
+                
+                while ((match = regex.exec(rangeText)) !== null) {
+                    const matchStart = from + match.index;
+                    const fullMatch = match[0];
+                    const matchEnd = matchStart + fullMatch.length;
+                    
+                    const colorCode = match[1]; // r, g, b, y or undefined
+                    const content = match[2] || "";
+                    
+                    // Determine Color Class
+                    let colorClass = 'tinted-inline-yellow'; // default
+                    if (colorCode === 'r') colorClass = 'tinted-inline-red';
+                    if (colorCode === 'g') colorClass = 'tinted-inline-green';
+                    if (colorCode === 'b') colorClass = 'tinted-inline-blue';
+                    if (colorCode === 'y') colorClass = 'tinted-inline-yellow';
+                    
+                    // Check cursor position
+                    const isCursorInside = selection.head >= matchStart && selection.head <= matchEnd;
+                    
+                    // Calculate sub-ranges
+                    // Start Marker: from matchStart to matchStart + (fullLen - contentLen - endMarkerLen)
+                    // End Marker: from matchEnd - endMarkerLen to matchEnd
+                    
+                    const endMarkerLen = marker.length;
+                    const contentLen = content.length;
+                    const startMarkerLen = fullMatch.length - contentLen - endMarkerLen;
+                    
+                    const startMarkerFrom = matchStart;
+                    const startMarkerTo = matchStart + startMarkerLen;
+                    
+                    const contentFrom = startMarkerTo;
+                    const contentTo = contentFrom + contentLen;
+                    
+                    const endMarkerFrom = contentTo;
+                    const endMarkerTo = matchEnd;
+                    
+                    // Add Decorations
+                    
+                    // Unified Block approach:
+                    // Instead of separate marks, we mark the WHOLE range with the background color.
+                    // And we apply specific classes to the start/end parts to style the text (faint).
+                    
+                    if (isCursorInside) {
+                        // Whole range gets the background color + rounded corners
+                        // But wait, if we use one mark for the whole range, we can't easily style the text of just the markers differently 
+                        // unless we use span wrapping logic which CodeMirror decorations do well.
+                        
+                        // Actually, we can stack decorations or use multiple classes.
+                        // Let's stick to separate ranges but ensure they have matching classes that join them visually.
+                        
+                        // 1. Start Marker
+                        builder.add(startMarkerFrom, startMarkerTo, Decoration.mark({ 
+                            class: `tinted-inline-marker tinted-inline-start ${colorClass}` 
+                        }));
+                        
+                        // 2. Content
+                        builder.add(contentFrom, contentTo, Decoration.mark({ 
+                            class: `tinted-inline-content ${colorClass}` 
+                        }));
+                        
+                        // 3. End Marker
+                        builder.add(endMarkerFrom, endMarkerTo, Decoration.mark({ 
+                            class: `tinted-inline-marker tinted-inline-end ${colorClass}` 
+                        }));
+                        
+                    } else {
+                        // Cursor outside: Hide markers, show content
+                        builder.add(startMarkerFrom, startMarkerTo, Decoration.replace({})); 
+                        builder.add(contentFrom, contentTo, Decoration.mark({ class: `tinted-inline ${colorClass}` }));
+                        builder.add(endMarkerFrom, endMarkerTo, Decoration.replace({}));
+                    }
+                }
             }
+            return builder.finish();
         }
     }, { decorations: v => v.decorations });
 }
@@ -269,21 +358,42 @@ export default class MyBlockPlugin extends Plugin {
         // Add Command
         this.addCommand({
             id: 'toggle-block-highlight',
-            name: 'Toggle block highlight',
+            name: 'Tint block',
             editorCallback: (editor: Editor, view: MarkdownView) => {
                 this.toggleBlockHighlight(editor);
+            }
+        });
+
+        this.addCommand({
+            id: 'toggle-inline-highlight',
+            name: 'Highlight text',
+            editorCallback: (editor: Editor, view: MarkdownView) => {
+                this.toggleInlineHighlight(editor);
             }
         });
 
         // Add Context Menu Item
         this.registerEvent(
             this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+                // Add items to the context menu
+                // There is no explicit "Format" submenu in API, so we just add them.
+                // Or we can try to find a section if Obsidian exposes it, but usually adding to root is standard.
+                
                 menu.addItem((item) => {
                     item
-                        .setTitle('Toggle block highlight')
+                        .setTitle('Tint block')
                         .setIcon('paint-bucket')
                         .onClick(() => {
                             this.toggleBlockHighlight(editor);
+                        });
+                });
+
+                menu.addItem((item) => {
+                    item
+                        .setTitle('Highlight text')
+                        .setIcon('highlighter')
+                        .onClick(() => {
+                            this.toggleInlineHighlight(editor);
                         });
                 });
             })
@@ -358,14 +468,6 @@ export default class MyBlockPlugin extends Plugin {
             editor.replaceRange('', { line: startLine, ch: 0 }, { line: startLine + 1, ch: 0 });
         } else {
             // Add block
-            // Use configured default color or just empty to let it use default from logic
-            // User said: "default color is text #999"
-            // If we write just "::>" without color, normalizeColor picks defaultColor.
-            // So we can write just the marker.
-            // Or we can write the defaultColor explicitly?
-            // Usually cleaner to write just the marker if it implies default.
-            // But let's write just the marker.
-            
             const selection = editor.getSelection();
             if (selection) {
                 const newText = `${startMarker}\n${selection}\n${endMarker}\n`;
@@ -378,6 +480,30 @@ export default class MyBlockPlugin extends Plugin {
                     { line: cursor.line + 1, ch: 0 }
                 );
             }
+        }
+    }
+
+    toggleInlineHighlight(editor: Editor) {
+        const selection = editor.getSelection();
+        const marker = this.settings.inlineMarker;
+        const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Regex to check if already wrapped (supports optional color code)
+        // Matches ::r:text:: or ::text::
+        const fullRegex = new RegExp(`^${escapedMarker}(?:[rgby]:)?(.*)${escapedMarker}$`);
+        
+        if (selection.match(fullRegex)) {
+             // Unwrap
+             // We need to capture the inner content
+             // The regex above captures the content in group 1
+             const match = selection.match(fullRegex);
+             if (match) {
+                 editor.replaceSelection(match[1] || "");
+             }
+        } else {
+            // Wrap
+            // Use default (yellow) -> ::text::
+            editor.replaceSelection(`${marker}${selection}${marker}`);
         }
     }
 
@@ -821,30 +947,72 @@ export default class MyBlockPlugin extends Plugin {
     }
 
     processInlineHighlight(element: HTMLElement) {
-        const marker = this.settings.inlineMarker;
+        const marker = this.settings.inlineMarker; // "::"
         const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`${escapedMarker}(.*?)${escapedMarker}`); 
+        // Regex: ::(?:([rgby]):)?(.*?)::
+        const regex = new RegExp(`${escapedMarker}(?:([rgby]):)?(.*?)${escapedMarker}`, 'g');
 
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
         let node;
+        const nodesToReplace: {node: Text, matches: RegExpMatchArray[]}[] = [];
+        
         while (node = walker.nextNode()) {
-            const text = node.textContent;
-            if (text && text.match(regex)) {
-                const span = document.createElement('span');
-                const parts = text.split(new RegExp(`(${escapedMarker}.*?${escapedMarker})`, 'g'));
-                
-                parts.forEach(part => {
-                    if (part.startsWith(marker) && part.endsWith(marker)) {
-                        const highlightSpan = document.createElement('span');
-                        highlightSpan.addClass('custom-inline-highlight');
-                        highlightSpan.textContent = part.slice(marker.length, -marker.length);
-                        span.appendChild(highlightSpan);
-                    } else {
-                        span.appendChild(document.createTextNode(part));
-                    }
-                });
-                node.parentNode?.replaceChild(span, node);
+            if (node.nodeType === Node.TEXT_NODE) {
+                 const text = node.textContent || "";
+                 // Use matchAll to find all occurrences if supported, or loop with exec
+                 const matches: RegExpMatchArray[] = [];
+                 let match;
+                 // Reset regex lastIndex just in case
+                 regex.lastIndex = 0;
+                 while ((match = regex.exec(text)) !== null) {
+                     matches.push(match);
+                 }
+                 
+                 if (matches.length > 0) {
+                     nodesToReplace.push({ node: node as Text, matches });
+                 }
             }
+        }
+        
+        // Perform replacements
+        for (const { node, matches } of nodesToReplace) {
+             const fragment = document.createDocumentFragment();
+             let lastIndex = 0;
+             const text = node.textContent || "";
+             
+             for (const match of matches) {
+                 const matchIndex = match.index!;
+                 
+                 // Add text before match
+                 if (matchIndex > lastIndex) {
+                     fragment.appendChild(document.createTextNode(text.substring(lastIndex, matchIndex)));
+                 }
+                 
+                 // Create span
+                 const colorCode = match[1];
+                 const content = match[2] || "";
+                 
+                 let colorClass = 'tinted-inline-yellow';
+                 if (colorCode === 'r') colorClass = 'tinted-inline-red';
+                 if (colorCode === 'g') colorClass = 'tinted-inline-green';
+                 if (colorCode === 'b') colorClass = 'tinted-inline-blue';
+                 if (colorCode === 'y') colorClass = 'tinted-inline-yellow';
+                 
+                 const span = document.createElement('span');
+                 span.className = `tinted-inline ${colorClass}`;
+                 span.textContent = content;
+                 
+                 fragment.appendChild(span);
+                 
+                 lastIndex = matchIndex + match[0].length;
+             }
+             
+             // Add remaining text
+             if (lastIndex < text.length) {
+                 fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+             }
+             
+             node.parentNode?.replaceChild(fragment, node);
         }
     }
 }
