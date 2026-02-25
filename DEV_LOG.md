@@ -64,3 +64,17 @@ When a user edits text inside a block, Obsidian re-renders that specific paragra
     - `removeTextFromEnd`: Only remove text if `element.textContent` actually ends with the marker string.
     - `removeTextFromStart`: Only remove text if `element.textContent` actually starts with the marker string.
 - **Lesson**: When persisting state that triggers destructive operations (like text removal), **always verify the target content exists** before performing the operation. Idempotency is key.
+
+## 7. Performance Critical: Infinite Loop in MutationObserver
+- **Issue**: The application (Obsidian) would freeze/lock up completely when loading the plugin, especially in Reading View. This occurred even in small vaults.
+- **Cause**: We created an infinite feedback loop.
+    1. The plugin uses `MutationObserver` to detect DOM changes and apply styles (add classes, modify text).
+    2. When `wrapMarkedBlocks` executes, it modifies the DOM.
+    3. These modifications **immediately** trigger the `MutationObserver` again.
+    4. The observer callback fires -> `wrapMarkedBlocks` runs again -> modifies DOM -> observer fires...
+    5. This flooded the JS event loop, causing the UI to freeze.
+- **Fix**: 
+    - **Disconnect before Modify**: In `wrapMarkedBlocks`, we explicitly call `observer.disconnect()` **before** making any DOM changes.
+    - **Reconnect after**: We use a `finally` block to ensure `observer.observe()` is called again after all changes are complete.
+    - **Robust Defaults**: Added strict checks in `loadSettings` to prevent `undefined` or invalid marker settings (which could cause Regex to match empty strings, leading to other infinite loops).
+- **Lesson**: When a plugin observes the DOM and also modifies it, it **MUST** stop observing during its own modifications to avoid infinite recursion.

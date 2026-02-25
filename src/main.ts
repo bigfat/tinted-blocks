@@ -420,7 +420,23 @@ export default class MyBlockPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        // Try to load data
+        const data = await this.loadData();
+        
+        // If data is null (first run) or object, merge with default
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+        
+        // Ensure markers are not empty or invalid
+        if (!this.settings.blockStartMarker) this.settings.blockStartMarker = DEFAULT_SETTINGS.blockStartMarker;
+        if (!this.settings.blockEndMarker) this.settings.blockEndMarker = DEFAULT_SETTINGS.blockEndMarker;
+        if (!this.settings.inlineMarker) this.settings.inlineMarker = DEFAULT_SETTINGS.inlineMarker;
+        
+        // Sanity check: prevent start == end
+        if (this.settings.blockStartMarker === this.settings.blockEndMarker) {
+            console.warn('[Tinted Blocks] Start and End markers cannot be the same. Resetting to defaults.');
+            this.settings.blockStartMarker = DEFAULT_SETTINGS.blockStartMarker;
+            this.settings.blockEndMarker = DEFAULT_SETTINGS.blockEndMarker;
+        }
     }
 
     async saveSettings() {
@@ -595,6 +611,9 @@ export default class MyBlockPlugin extends Plugin {
         };
 
         const observer = new MutationObserver((mutations) => {
+            // Disconnect immediately to prevent loops
+            observer.disconnect();
+            
             if (timeout) window.clearTimeout(timeout);
             timeout = window.setTimeout(process, 100);
         });
@@ -608,111 +627,128 @@ export default class MyBlockPlugin extends Plugin {
     }
     
     wrapMarkedBlocks(container: HTMLElement) {
-        // console.log(`[Tinted Blocks] Wrapping blocks in container`, container);
-        const children = Array.from(container.children) as HTMLElement[];
+        // Re-establish observer connection first (it was disconnected in callback or we need to ensure it's on)
+        // Actually, we should only reconnect AFTER we are done modifying.
+        // But the `process` function is called async via setTimeout.
+        // So the observer is already disconnected if it came from a mutation callback.
+        // If it came from initial setup, it's connected.
         
-        // CLEANUP STEP: Remove all existing styling classes from this container's children.
-        children.forEach(child => {
-            child.classList.remove('tinted-block-item', 'tinted-block-item-start', 'tinted-block-item-end');
-            child.style.removeProperty('--tint-color');
-        });
-        
-        // Prepare Regex for Fallback Scanning
-        const startMarker = this.settings.blockStartMarker;
-        const endMarker = this.settings.blockEndMarker;
-        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Regex must match what processPreviewMode uses
-        const startRegex = new RegExp(`^\\s*${escapeRegExp(startMarker)}(.*)`); 
-        const endRegex = new RegExp(`${escapeRegExp(endMarker)}\\s*$`); 
+        // Let's grab the observer
+        const observer = this.activeObservers.get(container);
+        if (observer) observer.disconnect();
 
-        let startEl: HTMLElement | null = null;
-        let elementsToWrap: HTMLElement[] = [];
-        let currentColor = "";
-        let startMarkerText = "";
+        try {
+            // console.log(`[Tinted Blocks] Wrapping blocks in container`, container);
+            const children = Array.from(container.children) as HTMLElement[];
+            
+            // CLEANUP STEP: Remove all existing styling classes from this container's children.
+            children.forEach(child => {
+                child.classList.remove('tinted-block-item', 'tinted-block-item-start', 'tinted-block-item-end');
+                child.style.removeProperty('--tint-color');
+            });
+            
+            // Prepare Regex for Fallback Scanning
+            const startMarker = this.settings.blockStartMarker;
+            const endMarker = this.settings.blockEndMarker;
+            const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Regex must match what processPreviewMode uses
+            const startRegex = new RegExp(`^\\s*${escapeRegExp(startMarker)}(.*)`); 
+            const endRegex = new RegExp(`${escapeRegExp(endMarker)}\\s*$`); 
 
-        for (const child of children) {
-            let isStart = false;
-            let isEnd = false;
-            let currentStartMarker = "";
-            let currentEndMarker = "";
-            let color = "";
+            let startEl: HTMLElement | null = null;
+            let elementsToWrap: HTMLElement[] = [];
+            let currentColor = "";
+            let startMarkerText = "";
 
-            // Check dataset first (fast path)
-            if (child.dataset.tintedStart) {
-                isStart = true;
-                currentStartMarker = child.dataset.tintedStartMarker || "";
-                color = child.dataset.tintedColor || "";
-            } else {
-                // Fallback: Check text content
-                const text = child.textContent || "";
-                const match = text.match(startRegex);
-                if (match) {
+            for (const child of children) {
+                let isStart = false;
+                let isEnd = false;
+                let currentStartMarker = "";
+                let currentEndMarker = "";
+                let color = "";
+
+                // Check dataset first (fast path)
+                if (child.dataset.tintedStart) {
                     isStart = true;
-                    currentStartMarker = match[0];
-                    color = this.normalizeColor(match[1] || "");
-                    // Save to dataset for future efficiency
-                    child.dataset.tintedStart = "true";
-                    child.dataset.tintedStartMarker = currentStartMarker;
-                    child.dataset.tintedColor = color;
+                    currentStartMarker = child.dataset.tintedStartMarker || "";
+                    color = child.dataset.tintedColor || "";
+                } else {
+                    // Fallback: Check text content
+                    const text = child.textContent || "";
+                    const match = text.match(startRegex);
+                    if (match) {
+                        isStart = true;
+                        currentStartMarker = match[0];
+                        color = this.normalizeColor(match[1] || "");
+                        // Save to dataset for future efficiency
+                        child.dataset.tintedStart = "true";
+                        child.dataset.tintedStartMarker = currentStartMarker;
+                        child.dataset.tintedColor = color;
+                    }
                 }
-            }
 
-            // Check End
-            if (child.dataset.tintedEnd) {
-                isEnd = true;
-                currentEndMarker = child.dataset.tintedEndMarker || "";
-            } else {
-                // Fallback
-                const text = child.textContent || "";
-                const match = text.match(endRegex);
-                if (match) {
+                // Check End
+                if (child.dataset.tintedEnd) {
                     isEnd = true;
-                    currentEndMarker = match[0];
-                    child.dataset.tintedEnd = "true";
-                    child.dataset.tintedEndMarker = currentEndMarker;
+                    currentEndMarker = child.dataset.tintedEndMarker || "";
+                } else {
+                    // Fallback
+                    const text = child.textContent || "";
+                    const match = text.match(endRegex);
+                    if (match) {
+                        isEnd = true;
+                        currentEndMarker = match[0];
+                        child.dataset.tintedEnd = "true";
+                        child.dataset.tintedEndMarker = currentEndMarker;
+                    }
                 }
-            }
 
-            // Logic State Machine
-            if (isStart) {
+                // Logic State Machine
+                if (isStart) {
+                    if (startEl) {
+                        // We found a NEW start marker while a previous one was open.
+                        // This means the previous block was not closed (missing end marker).
+                        // We should close the previous block implicitly? Or just abandon it?
+                        // If we abandon it, the elements remain unstyled.
+                        // Let's assume nested blocks are not allowed, so we restart.
+                        // console.log(`[Tinted Blocks] Found new start '${currentStartMarker}' before closing previous. Restarting from here.`);
+                        // Ideally we should process the previous elements? 
+                        // No, without end marker it's invalid.
+                    }
+                    startEl = child;
+                    currentColor = color;
+                    startMarkerText = currentStartMarker;
+                    elementsToWrap = [child];
+                    
+                    // If this same element is ALSO an end marker (single line block)
+                    if (isEnd) {
+                        this.performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
+                        startEl = null;
+                        elementsToWrap = [];
+                    }
+                    continue;
+                }
+
                 if (startEl) {
-                    // We found a NEW start marker while a previous one was open.
-                    // This means the previous block was not closed (missing end marker).
-                    // We should close the previous block implicitly? Or just abandon it?
-                    // If we abandon it, the elements remain unstyled.
-                    // Let's assume nested blocks are not allowed, so we restart.
-                    // console.log(`[Tinted Blocks] Found new start '${currentStartMarker}' before closing previous. Restarting from here.`);
-                    // Ideally we should process the previous elements? 
-                    // No, without end marker it's invalid.
+                    // We are inside a block
+                    elementsToWrap.push(child);
+                    
+                    if (isEnd) {
+                        // Found end
+                        this.performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
+                        startEl = null;
+                        elementsToWrap = [];
+                    }
+                } else if (isEnd) {
+                    // Found an end marker but no start marker was open.
+                    // Orphaned end marker. Ignore.
+                    // console.log(`[Tinted Blocks] Found orphaned end marker.`);
                 }
-                startEl = child;
-                currentColor = color;
-                startMarkerText = currentStartMarker;
-                elementsToWrap = [child];
-                
-                // If this same element is ALSO an end marker (single line block)
-                if (isEnd) {
-                     this.performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
-                     startEl = null;
-                     elementsToWrap = [];
-                }
-                continue;
             }
-
-            if (startEl) {
-                // We are inside a block
-                elementsToWrap.push(child);
-                
-                if (isEnd) {
-                    // Found end
-                    this.performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
-                    startEl = null;
-                    elementsToWrap = [];
-                }
-            } else if (isEnd) {
-                // Found an end marker but no start marker was open.
-                // Orphaned end marker. Ignore.
-                // console.log(`[Tinted Blocks] Found orphaned end marker.`);
+        } finally {
+            // Reconnect observer
+            if (observer) {
+                observer.observe(container, { childList: true });
             }
         }
     }
@@ -820,10 +856,31 @@ export default class MyBlockPlugin extends Plugin {
             // Even if this specific element has no markers, it might be a new middle-child of an existing block.
             // Or it might be an element that broke a block.
             // We should queue the parent to re-evaluate the whole container.
-            if (element.parentElement) {
-                this.queueWrapping(element.parentElement);
-            }
+            
+            // PERFORMANCE FIX: 
+            // Do NOT queue wrapping for every single element without markers!
+            // This causes massive performance issues (thousands of timers) on large documents.
+            // Only rely on MutationObserver (set up by marked blocks) to handle dynamic updates.
+            // If a block has NO markers at all, it doesn't need to be observed initially.
+            // When a marker IS added, this function will run again with hasWork=true, setting up the observer.
+            
+            // However, if we are inside a container that IS already observed, the observer handles it.
+            // If we are inside a container that is NOT observed, and we have no markers, we do nothing.
+            // This is safe and performant.
+            
+            // EXCEPTION: If we are editing and REMOVE a marker, this element now has no markers.
+            // But the parent is likely already observed (from previous state).
+            // The MutationObserver will detect the text change and trigger a re-scan of the parent.
+            // So we don't need to manually queue here either.
         }
+    }
+
+    onunload() {
+        // Clean up all observers
+        for (const observer of this.activeObservers.values()) {
+            observer.disconnect();
+        }
+        this.activeObservers.clear();
     }
 
     // Robust text removal helpers
