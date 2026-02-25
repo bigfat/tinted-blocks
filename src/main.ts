@@ -589,10 +589,6 @@ export default class MyBlockPlugin extends Plugin {
     // Robust text removal helpers
     removeTextFromStart(element: HTMLElement, textToRemove: string) {
         // We traverse text nodes and eat characters until we removed enough.
-        // textToRemove might contain characters that are technically in different nodes or split?
-        // Usually textToRemove is from textContent, so it ignores markup.
-        // We just need to remove 'N' characters from the start of the text content flow.
-        
         let charsLeft = textToRemove.length;
         
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
@@ -609,6 +605,45 @@ export default class MyBlockPlugin extends Plugin {
                 charsLeft = 0;
             }
         }
+        
+        // Post-processing: If the element is now effectively empty (only contains <br> or whitespace), hide it?
+        // Or if the start marker was on its own line, we might have a leftover <br> or empty <p>.
+        
+        // Check if the element has any visible content left.
+        // If textContent is empty or just whitespace, AND it has no other significant children (like images),
+        // we might want to collapse it.
+        
+        const text = element.textContent?.trim();
+        
+        // Strict check: if it contains only <br> tags or whitespace, it is empty.
+         // We need to check innerHTML or children because textContent ignores <br>.
+         const hasContent = Array.from(element.childNodes).some(node => {
+             // Text node with non-whitespace
+             if (node.nodeType === Node.TEXT_NODE && node.textContent?.replace(/\u200B/g, '').trim()) return true;
+             // Element node that is NOT <br>
+             if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName !== 'BR') return true;
+             return false;
+         });
+ 
+         if (!text && !hasContent) {
+              console.log(`[Tinted Blocks] Start element is empty. Hiding:`, element);
+              
+              // Hide this element
+              element.style.display = 'none';
+              // Force hide with class just in case style is overridden
+              element.addClass('tinted-block-hidden');
+              element.classList.remove('tinted-block-item'); 
+              
+              // Find next visible sibling to be the new start
+              let next = element.nextElementSibling as HTMLElement;
+              while (next && (next.style.display === 'none' || next.classList.contains('tinted-block-hidden'))) {
+                  next = next.nextElementSibling as HTMLElement;
+              }
+              
+              if (next && next.classList.contains('tinted-block-item')) {
+                  next.classList.add('tinted-block-item-start');
+              }
+         }
     }
 
     removeTextFromEnd(element: HTMLElement, textToRemove: string) {
@@ -635,6 +670,29 @@ export default class MyBlockPlugin extends Plugin {
                 n.textContent = val.substring(0, val.length - charsToCut);
                 charsToCut = 0;
             }
+        }
+        
+        // Check end element for emptiness too
+        const text = element.textContent?.trim();
+        const hasContent = Array.from(element.childNodes).some(node => {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) return true;
+            if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName !== 'BR') return true;
+            return false;
+        });
+
+        if (!text && !hasContent) {
+             // console.log(`[Tinted Blocks] End element is empty after removal. Hiding and promoting previous sibling.`);
+             element.style.display = 'none';
+             element.classList.remove('tinted-block-item');
+             
+             let prev = element.previousElementSibling as HTMLElement;
+             while (prev && prev.style.display === 'none') {
+                 prev = prev.previousElementSibling as HTMLElement;
+             }
+             
+             if (prev && prev.classList.contains('tinted-block-item')) {
+                 prev.classList.add('tinted-block-item-end');
+             }
         }
     }
 

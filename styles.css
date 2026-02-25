@@ -128,7 +128,13 @@
     color: var(--tint-color, var(--text-normal)) !important;
     
     /* Box model adjustments */
-    padding: 0 12px !important; /* Left/Right padding */
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    
+    /* Simulate paragraph spacing with padding instead of margin to keep background continuous */
+    padding-top: 0.7em !important;
+    padding-bottom: 0.7em !important;
+    
     margin-top: 0 !important;
     margin-bottom: 0 !important;
     
@@ -140,16 +146,22 @@
     border-radius: 0 !important;
 }
 
+/* CRITICAL: Remove margins from internal elements (p, ul, etc.) to prevent margin collapse creating white gaps */
+.tinted-block-item > * {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
 /* First item in the block */
 .tinted-block-item-start {
     /* Top rounded corners */
     border-top-left-radius: 8px !important;
     border-top-right-radius: 8px !important;
     
-    /* Top padding */
+    /* Extra Top padding for visual aesthetics */
     padding-top: 12px !important;
     
-    /* Add top margin back */
+    /* Add top margin back to separate from previous content in the doc */
     margin-top: 1em !important;
 }
 
@@ -159,10 +171,10 @@
     border-bottom-left-radius: 8px !important;
     border-bottom-right-radius: 8px !important;
     
-    /* Bottom padding */
+    /* Extra Bottom padding for visual aesthetics */
     padding-bottom: 12px !important;
     
-    /* Add bottom margin back */
+    /* Add bottom margin back to separate from next content in the doc */
     margin-bottom: 1em !important;
 }
 
@@ -171,6 +183,7 @@
 .tinted-block-item ol {
     margin-top: 0 !important;
     margin-bottom: 0 !important;
+    padding-left: 20px !important; /* Ensure bullets are visible */
 }
 
 /* Cleanup old preview styles if no longer used */
