@@ -430,6 +430,7 @@ export default class MyBlockPlugin extends Plugin {
         if (!this.settings.blockStartMarker) this.settings.blockStartMarker = DEFAULT_SETTINGS.blockStartMarker;
         if (!this.settings.blockEndMarker) this.settings.blockEndMarker = DEFAULT_SETTINGS.blockEndMarker;
         if (!this.settings.inlineMarker) this.settings.inlineMarker = DEFAULT_SETTINGS.inlineMarker;
+        if (!this.settings.defaultColor) this.settings.defaultColor = DEFAULT_SETTINGS.defaultColor;
         
         // Sanity check: prevent start == end
         if (this.settings.blockStartMarker === this.settings.blockEndMarker) {

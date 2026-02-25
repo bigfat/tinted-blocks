@@ -273,7 +273,7 @@
     padding-right: 2px;
     
     /* Remove right margin to touch content */
-    margin-right: -1px; 
+    margin-right: 0; 
 }
 
 /* End Marker (Right side) */
@@ -288,7 +288,7 @@
     padding-left: 2px;
     
     /* Remove left margin to touch content */
-    margin-left: -1px;
+    margin-left: 0;
 }
 
 /* When markers are hidden, the content needs full rounded corners */
@@ -297,23 +297,44 @@
    The markers have .tinted-inline-marker AND color class.
 */
 
-/* Colors - Highlighter style (Neon/Fluorescent) */
-/* We use !important to ensure it overrides default text colors if needed */
+/* Colors - Highlighter style (Neon/Fluorescent) - Now Transparent */
+/* We want to keep original text color, but add a colored background with transparency. */
+
+/* Default Text Color Reset: Allow inheriting from editor/preview */
+.tinted-inline {
+    color: inherit !important;
+}
+
+/* Red */
 .tinted-inline-red {
-    background-color: #ffb3b3 !important; /* Light Red/Pink */
-    color: #000000 !important;
+    background-color: rgba(255, 0, 0, 0.2) !important; /* Transparent Red */
 }
+.theme-dark .tinted-inline-red {
+    background-color: rgba(255, 60, 60, 0.25) !important; /* Slightly brighter for dark mode */
+}
+
+/* Green */
 .tinted-inline-green {
-    background-color: #b3ffb3 !important; /* Light Green */
-    color: #000000 !important;
+    background-color: rgba(0, 255, 0, 0.2) !important; /* Transparent Green */
 }
+.theme-dark .tinted-inline-green {
+    background-color: rgba(60, 255, 60, 0.25) !important;
+}
+
+/* Blue */
 .tinted-inline-blue {
-    background-color: #b3d9ff !important; /* Light Blue */
-    color: #000000 !important;
+    background-color: rgba(0, 100, 255, 0.2) !important; /* Transparent Blue */
 }
+.theme-dark .tinted-inline-blue {
+    background-color: rgba(60, 160, 255, 0.25) !important;
+}
+
+/* Yellow */
 .tinted-inline-yellow {
-    background-color: #ffffb3 !important; /* Light Yellow */
-    color: #000000 !important;
+    background-color: rgba(255, 255, 0, 0.25) !important; /* Transparent Yellow */
+}
+.theme-dark .tinted-inline-yellow {
+    background-color: rgba(255, 255, 60, 0.25) !important;
 }
 
 /* Visible marker (when cursor inside) - No opacity on background! */
