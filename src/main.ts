@@ -463,24 +463,91 @@ export default class MyBlockPlugin extends Plugin {
     }
     
     wrapMarkedBlocks(container: HTMLElement) {
+        // console.log(`[Tinted Blocks] Wrapping blocks in container`, container);
         const children = Array.from(container.children) as HTMLElement[];
         
+        // CLEANUP STEP: Remove all existing styling classes from this container's children.
+        children.forEach(child => {
+            child.classList.remove('tinted-block-item', 'tinted-block-item-start', 'tinted-block-item-end');
+            child.style.removeProperty('--tint-color');
+        });
+        
+        // Prepare Regex for Fallback Scanning
+        const startMarker = this.settings.blockStartMarker;
+        const endMarker = this.settings.blockEndMarker;
+        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Regex must match what processPreviewMode uses
+        const startRegex = new RegExp(`^\\s*${escapeRegExp(startMarker)}(.*)`); 
+        const endRegex = new RegExp(`${escapeRegExp(endMarker)}\\s*$`); 
+
         let startEl: HTMLElement | null = null;
         let elementsToWrap: HTMLElement[] = [];
         let currentColor = "";
         let startMarkerText = "";
 
         for (const child of children) {
-            // Check if this element is a start marker
+            let isStart = false;
+            let isEnd = false;
+            let currentStartMarker = "";
+            let currentEndMarker = "";
+            let color = "";
+
+            // Check dataset first (fast path)
             if (child.dataset.tintedStart) {
+                isStart = true;
+                currentStartMarker = child.dataset.tintedStartMarker || "";
+                color = child.dataset.tintedColor || "";
+            } else {
+                // Fallback: Check text content
+                const text = child.textContent || "";
+                const match = text.match(startRegex);
+                if (match) {
+                    isStart = true;
+                    currentStartMarker = match[0];
+                    color = this.normalizeColor(match[1] || "");
+                    // Save to dataset for future efficiency
+                    child.dataset.tintedStart = "true";
+                    child.dataset.tintedStartMarker = currentStartMarker;
+                    child.dataset.tintedColor = color;
+                }
+            }
+
+            // Check End
+            if (child.dataset.tintedEnd) {
+                isEnd = true;
+                currentEndMarker = child.dataset.tintedEndMarker || "";
+            } else {
+                // Fallback
+                const text = child.textContent || "";
+                const match = text.match(endRegex);
+                if (match) {
+                    isEnd = true;
+                    currentEndMarker = match[0];
+                    child.dataset.tintedEnd = "true";
+                    child.dataset.tintedEndMarker = currentEndMarker;
+                }
+            }
+
+            // Logic State Machine
+            if (isStart) {
+                if (startEl) {
+                    // We found a NEW start marker while a previous one was open.
+                    // This means the previous block was not closed (missing end marker).
+                    // We should close the previous block implicitly? Or just abandon it?
+                    // If we abandon it, the elements remain unstyled.
+                    // Let's assume nested blocks are not allowed, so we restart.
+                    console.log(`[Tinted Blocks] Found new start '${currentStartMarker}' before closing previous. Restarting from here.`);
+                    // Ideally we should process the previous elements? 
+                    // No, without end marker it's invalid.
+                }
                 startEl = child;
-                currentColor = child.dataset.tintedColor || "";
-                startMarkerText = child.dataset.tintedStartMarker || "";
+                currentColor = color;
+                startMarkerText = currentStartMarker;
                 elementsToWrap = [child];
                 
-                // If it's also an end marker (single line block)
-                if (child.dataset.tintedEnd) {
-                     this.performWrap(container, elementsToWrap, currentColor, startMarkerText, child.dataset.tintedEndMarker || "");
+                // If this same element is ALSO an end marker (single line block)
+                if (isEnd) {
+                     this.performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
                      startEl = null;
                      elementsToWrap = [];
                 }
@@ -488,14 +555,19 @@ export default class MyBlockPlugin extends Plugin {
             }
 
             if (startEl) {
+                // We are inside a block
                 elementsToWrap.push(child);
                 
-                if (child.dataset.tintedEnd) {
+                if (isEnd) {
                     // Found end
-                    this.performWrap(container, elementsToWrap, currentColor, startMarkerText, child.dataset.tintedEndMarker || "");
+                    this.performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
                     startEl = null;
                     elementsToWrap = [];
                 }
+            } else if (isEnd) {
+                // Found an end marker but no start marker was open.
+                // Orphaned end marker. Ignore.
+                // console.log(`[Tinted Blocks] Found orphaned end marker.`);
             }
         }
     }
@@ -518,11 +590,16 @@ export default class MyBlockPlugin extends Plugin {
             }
             
             // Cleanup attributes
-            el.removeAttribute('data-tinted-start');
-            el.removeAttribute('data-tinted-end');
-            el.removeAttribute('data-tinted-color');
-            el.removeAttribute('data-tinted-start-marker');
-            el.removeAttribute('data-tinted-end-marker');
+            // CRITICAL FIX: Do NOT remove dataset attributes (data-tinted-start/end).
+            // We need them to persist because we remove the text content.
+            // If `wrapMarkedBlocks` runs again (e.g. after a neighbor edit), it needs these attributes
+            // to identify the marker elements since the text "::>blue" is gone.
+            
+            // el.removeAttribute('data-tinted-start');
+            // el.removeAttribute('data-tinted-end');
+            // el.removeAttribute('data-tinted-color');
+            // el.removeAttribute('data-tinted-start-marker');
+            // el.removeAttribute('data-tinted-end-marker');
         });
 
         // Clean text
@@ -539,6 +616,9 @@ export default class MyBlockPlugin extends Plugin {
     }
 
     processPreviewMode(element: HTMLElement, context: MarkdownPostProcessorContext) {
+        // Unconditional Log to prove execution
+        // console.log(`[Tinted Blocks] PostProcessor called at ${new Date().toISOString()}`);
+        
         // 1. Inline Highlight
         this.processInlineHighlight(element);
 
@@ -559,10 +639,13 @@ export default class MyBlockPlugin extends Plugin {
 
         for (const child of children) {
             const text = child.textContent || "";
+            // Debug the exact content being matched
+            // console.log(`[Tinted Blocks] Checking content (len=${text.length}): '${text.replace(/\n/g, '\\n')}'`);
             
             // Check Start
             const startMatch = text.match(startRegex);
             if (startMatch) {
+                // console.log(`[Tinted Blocks] Marking START on wrapper:`, element);
                 // Mark the ELEMENT (wrapper), not just the child
                 element.dataset.tintedStart = "true";
                 element.dataset.tintedStartMarker = startMatch[0]; 
@@ -575,6 +658,7 @@ export default class MyBlockPlugin extends Plugin {
             // Check End
             const endMatch = text.match(endRegex);
             if (endMatch) {
+                // console.log(`[Tinted Blocks] Marking END on wrapper:`, element);
                 element.dataset.tintedEnd = "true";
                 element.dataset.tintedEndMarker = endMatch[0];
                 hasWork = true;
@@ -583,6 +667,13 @@ export default class MyBlockPlugin extends Plugin {
 
         if (hasWork) {
             this.queueWrapping(element);
+        } else {
+            // Even if this specific element has no markers, it might be a new middle-child of an existing block.
+            // Or it might be an element that broke a block.
+            // We should queue the parent to re-evaluate the whole container.
+            if (element.parentElement) {
+                this.queueWrapping(element.parentElement);
+            }
         }
     }
 
@@ -630,10 +721,10 @@ export default class MyBlockPlugin extends Plugin {
          });
  
          if (!text && !hasContent) {
-              console.log(`[Tinted Blocks] Start element is empty. Hiding:`, element);
-              
-              // Hide this element
-              element.style.display = 'none';
+             // console.log(`[Tinted Blocks] Start element is empty. Hiding:`, element);
+             
+             // Hide this element
+             element.style.display = 'none';
               // Force hide with class just in case style is overridden
               element.addClass('tinted-block-hidden');
               element.classList.remove('tinted-block-item'); 
@@ -713,7 +804,7 @@ export default class MyBlockPlugin extends Plugin {
                 const el = child as HTMLElement;
                 if (el.tagName === 'BR') {
                     // Found it!
-                    console.log(`[Tinted Blocks] Removing phantom <br> in`, el.parentElement);
+                    // console.log(`[Tinted Blocks] Removing phantom <br> in`, el.parentElement);
                     el.remove();
                     return true; // Done
                 }
