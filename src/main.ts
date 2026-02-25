@@ -536,7 +536,7 @@ export default class MyBlockPlugin extends Plugin {
                     // We should close the previous block implicitly? Or just abandon it?
                     // If we abandon it, the elements remain unstyled.
                     // Let's assume nested blocks are not allowed, so we restart.
-                    console.log(`[Tinted Blocks] Found new start '${currentStartMarker}' before closing previous. Restarting from here.`);
+                    // console.log(`[Tinted Blocks] Found new start '${currentStartMarker}' before closing previous. Restarting from here.`);
                     // Ideally we should process the previous elements? 
                     // No, without end marker it's invalid.
                 }
@@ -679,6 +679,15 @@ export default class MyBlockPlugin extends Plugin {
 
     // Robust text removal helpers
     removeTextFromStart(element: HTMLElement, textToRemove: string) {
+        // Safety Check: Verify the text actually starts with the marker
+        const currentText = element.textContent || "";
+        
+        // Use a loose check to account for potential whitespace differences, 
+        // but strict enough to prevent removing content if marker is gone.
+        if (!currentText.includes(textToRemove) && !currentText.trim().startsWith(textToRemove.trim())) {
+            return;
+        }
+
         // We traverse text nodes and eat characters until we removed enough.
         let charsLeft = textToRemove.length;
         
@@ -698,38 +707,22 @@ export default class MyBlockPlugin extends Plugin {
         }
         
         // Remove any leading <br> tags immediately following the removed text
-        // Use recursive helper to find the <br> even if it's inside a <p> or <span>
         this.removeLeadingBR(element);
          
-         // Post-processing: If the element is now effectively empty (only contains <br> or whitespace), hide it?
-        // Or if the start marker was on its own line, we might have a leftover <br> or empty <p>.
-        
-        // Check if the element has any visible content left.
-        // If textContent is empty or just whitespace, AND it has no other significant children (like images),
-        // we might want to collapse it.
-        
+        // Post-processing: If the element is now effectively empty
         const text = element.textContent?.trim();
         
-        // Strict check: if it contains only <br> tags or whitespace, it is empty.
-         // We need to check innerHTML or children because textContent ignores <br>.
          const hasContent = Array.from(element.childNodes).some(node => {
-             // Text node with non-whitespace
              if (node.nodeType === Node.TEXT_NODE && node.textContent?.replace(/\u200B/g, '').trim()) return true;
-             // Element node that is NOT <br>
              if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName !== 'BR') return true;
              return false;
          });
  
          if (!text && !hasContent) {
-             // console.log(`[Tinted Blocks] Start element is empty. Hiding:`, element);
-             
-             // Hide this element
              element.style.display = 'none';
-              // Force hide with class just in case style is overridden
               element.addClass('tinted-block-hidden');
               element.classList.remove('tinted-block-item'); 
               
-              // Find next visible sibling to be the new start
               let next = element.nextElementSibling as HTMLElement;
               while (next && (next.style.display === 'none' || next.classList.contains('tinted-block-hidden'))) {
                   next = next.nextElementSibling as HTMLElement;
@@ -742,6 +735,16 @@ export default class MyBlockPlugin extends Plugin {
     }
 
     removeTextFromEnd(element: HTMLElement, textToRemove: string) {
+        // Safety Check: Verify the text actually ends with the marker
+        const currentText = element.textContent || "";
+        
+        // If the element text doesn't end with the marker (ignoring trailing whitespace), return.
+        // We trim the comparison to be robust against trailing newlines/spaces in DOM vs Marker.
+        if (!currentText.trimEnd().endsWith(textToRemove.trimEnd())) {
+            // console.log(`[Tinted Blocks] End marker '${textToRemove}' not found at end of '${currentText}'. Skipping removal.`);
+            return;
+        }
+
         const nodes: Node[] = [];
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
         let node;

@@ -56,3 +56,11 @@ When a user edits text inside a block, Obsidian re-renders that specific paragra
 2.  **State Persistence**: Store state in the DOM (`dataset`) if the model is opaque or inaccessible.
 3.  **Asynchronous Rendering**: Always assume elements appear asynchronously. Use `MutationObserver` over `setTimeout`.
 4.  **CSS robustness**: Use `!important` sparingly but necessarily when overriding host app defaults that you cannot control via specificity alone.
+
+## 6. Regression: Lost Content on Re-render
+- **Issue**: A severe regression where the last word of a block's text was deleted in Reading View.
+- **Cause**: The `removeTextFromEnd` function blindly removed `N` characters based on the marker length. Because we persisted `data-tinted-end` attributes (to fix the flickering issue), `performWrap` was called multiple times. The first pass correctly removed the marker `<::`. Subsequent passes (triggered by `MutationObserver`) saw the attribute, assumed the marker was still there, and removed the next `N` characters (valid content).
+- **Fix**: Added a strict safety check in `removeTextFromStart` and `removeTextFromEnd`.
+    - `removeTextFromEnd`: Only remove text if `element.textContent` actually ends with the marker string.
+    - `removeTextFromStart`: Only remove text if `element.textContent` actually starts with the marker string.
+- **Lesson**: When persisting state that triggers destructive operations (like text removal), **always verify the target content exists** before performing the operation. Idempotency is key.
