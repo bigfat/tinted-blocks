@@ -1,75 +1,83 @@
-# Tinted Blocks — 给 Markdown 加一点「色」 🎨
+# Tinted Blocks 🎨
 
-让你的 Obsidian 笔记块一键染色：文本颜色 = 你指定的颜色，背景 = 该颜色的 10%。灵感来自 Notion / Craft，但更轻、更本地化。
+> Add a splash of color to your Obsidian notes. Highlight blocks of text elegantly, just like in Notion or Craft, but with more power.
 
-开发时间：2026-02-24 ~ 2026-02-25  
-当前版本：0.5.0（不轻易升版本，功能稳定优先）
+**Tinted Blocks** allows you to wrap any content—paragraphs, lists, blockquotes—in a beautiful, colored container. It supports both **Live Preview** and **Reading View**, ensuring your notes look stunning in any mode.
 
-## 核心功能
-- 块级高亮：用成对标记把一段内容包起来，整段变成带底色的卡片。
-- 行内高亮：用对称标记包住一小段文字。
-- 颜色：支持所有 CSS 颜色值（如 `blue`、`#c00`、`rgb(50,100,200)`）。
-- 交互：光标进入色块时，开头/结束标记以 60% 文字色显示；默认隐藏，保持页面干净。
+## ✨ Features
 
-## 怎么用
-1) 块级高亮（最常用）
+- **Dynamic Coloring**: Use any valid CSS color name (`blue`, `red`, `gold`) or hex code (`#ff00aa`).
+- **Smart Visibility**: Block markers (`::>`) automatically fade away when you're not editing the block, keeping your reading experience clean.
+- **Rich Content Support**: Works perfectly with **bullet lists**, **numbered lists**, and **blockquotes** inside the colored block.
+- **Inline Highlighting**: Highlight specific words or phrases within a line.
+- **Native Integration**: Use the **Command Palette**, **Right-Click Menu**, or customize **Hotkeys**.
 
-在内容前后添加开始/结束标记（可在设置中自定义，默认如下）：
+---
 
-```
+## 🚀 How to Use
+
+### Method 1: The "Hacker" Way (Typing)
+Simply type the start marker followed by a color, write your content, and close with the end marker.
+
+```markdown
 ::> blue
-这是一个被染色的内容块
-可以有多行
+This is a blue block.
+It supports **Markdown** formatting.
 <::
 ```
 
-- `::> blue`：文本色 = 蓝色；背景 = 蓝色的 10%。
-- 也可以写：`::> #e91e63`、`::> rgb(120,200,255)`。
-- 整个块拥有圆角与内边距，像卡片一样舒服。
+You can use any color format:
+- `::> red` (Standard CSS names)
+- `::> #4caf50` (Hex codes)
+- `::> rgb(100, 200, 255)` (RGB values)
 
-2) 行内高亮
+If you omit the color (e.g., just `::>`), it defaults to your theme's text color.
 
-默认标记为 `::`，用法：
+### Method 2: The "Mouse" Way (Context Menu)
+1. Select any text in your editor.
+2. **Right-click** on the selection.
+3. Choose **Toggle block highlight**.
+4. A default block (blue) will wrap your selection instantly.
 
-```
-这是一段 ::行内高亮:: 内容
-```
+### Method 3: The "Pro" Way (Hotkeys)
+Speed up your workflow by assigning a custom hotkey!
 
-3) 命令 & 菜单
-- 编辑器右键菜单里有 “Toggle block highlight”。
-- 可在 Obsidian 的快捷键面板为它分配热键。
+1. Open Obsidian **Settings** -> **Hotkeys**.
+2. Search for `Tinted Blocks: Toggle block highlight`.
+3. Assign your favorite shortcut (e.g., `Cmd+Shift+H` or `Ctrl+Shift+H`).
+4. Now, just select text and hit your hotkey to toggle highlighting on/off.
 
-## 设置项
-- 开始标记 / 结束标记（默认：`::>` 和 `<::`）
-- 行内标记（默认：`::`）
-- 以上都可以在设置面板中修改（插件启用后 → 设置 → 插件 → Tinted Blocks）
+---
 
-## 兼容性与规范
-- 最低支持 Obsidian 版本：0.15.0
-- 移动端与桌面端均可用（不依赖 Electron 专属 API）
-- 完全本地运行，无任何网络请求，不收集任何数据
+## ⚙️ Customization
 
-## 安装与开发
-- 用户安装（本地测试）：
-  - 构建：`npm install && npm run build`
-  - 将生成的 `main.js`、`manifest.json`、`styles.css` 复制到你的 Vault：
-    `<Vault>/.obsidian/plugins/tinted-blocks/`
-  - 在 Obsidian 中开启插件。
+Don't like the default `::>` syntax? You can change it!
 
-- 开发者：
-  - 开发预览：`npm run dev`（监听构建）
-  - 生产构建：`npm run build`
-  - 代码位于 `src/`，使用 esbuild 打包到 `main.js`。
+Go to **Settings** -> **Tinted Blocks** to configure:
+- **Block Start Marker**: Default is `::>`.
+- **Block End Marker**: Default is `<::`.
+- **Inline Marker**: Default is `::` (for inline highlights like `::text::`).
 
-## 小贴士
-- 列表（ul/ol）或引用在色块内时，会自动修正缩进与对齐。
-- 阅读视图与编辑视图会分别处理，力求视觉一致。
-- 如果某个主题的特殊样式盖过了色块效果，欢迎提 Issue（或者自己动手在 styles.css 里加一条 `!important`，纯本地小改动更快）。
+---
 
-## 许可与隐私
-- 插件默认不包含第三方服务或遥测。
-- 内容只在本地渲染与存储。
-- 发布到社区时会附带标准开源许可（未定），目前仓库为独立私有开发阶段。
+## 🛠️ Development
 
-Happy hacking! 🚀
+This plugin was built with TypeScript and uses the Obsidian API.
 
+### Prerequisite
+- Node.js (v18+)
+- npm
+
+### Setup
+1. Clone the repository.
+2. Run `npm install` to install dependencies.
+3. Run `npm run dev` to start compilation in watch mode.
+
+### Building
+Run `npm run build` to create a production build (`main.js`, `styles.css`, `manifest.json`).
+
+---
+
+<p align="center">
+  Made with ❤️ for the Obsidian Community.
+</p>

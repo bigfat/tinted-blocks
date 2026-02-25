@@ -14,16 +14,22 @@
     /* Text color is the main color */
     color: var(--tint-color, var(--text-normal)) !important;
 
-    /* Common padding for left/right - Changed to 12px */
-    padding-left: 12px !important;
-    padding-right: 12px !important;
+    /* Visual left/right inset WITHOUT affecting child layout:
+       Use transparent borders. */
+    border-left: 12px solid transparent !important;
+    border-right: 12px solid transparent !important;
+    
+    /* Ensure background covers the transparent border area */
+    background-clip: border-box !important;
     
     /* Ensure blocks look contiguous */
     margin-top: 0 !important;
     margin-bottom: 0 !important;
     
     /* Remove default borders if any */
-    border: none !important;
+    border-top: none !important;
+    border-bottom: none !important;
+    position: relative !important;
 }
 
 /* 
@@ -124,9 +130,12 @@
 .tinted-block-preview {
     background-color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 10%, transparent) !important;
     color: var(--tint-color, var(--text-normal)) !important;
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    border: none !important;
+    /* Match the same visual inset technique in Preview */
+    border-left: 12px solid transparent !important;
+    border-right: 12px solid transparent !important;
+    background-clip: border-box !important;
+    border-top: none !important;
+    border-bottom: none !important;
     margin-top: 0 !important;
     margin-bottom: 0 !important;
     display: block !important;
