@@ -1,0 +1,173 @@
+/* =========================================
+   Tinted Blocks - Core Styles
+   ========================================= */
+
+/* 
+   Base class for all block lines (start, mid, end).
+   We use CSS variables for dynamic coloring.
+   --tint-color: The main color (text color).
+*/
+.tinted-block {
+    /* Background is 10% of the text color */
+    background-color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 10%, transparent) !important;
+    
+    /* Text color is the main color */
+    color: var(--tint-color, var(--text-normal)) !important;
+
+    /* Common padding for left/right - Changed to 12px */
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    
+    /* Ensure blocks look contiguous */
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    
+    /* Remove default borders if any */
+    border: none !important;
+}
+
+/* 
+   Live Preview List/Quote Fixes
+   Lists and blockquotes often use negative text-indent or margins.
+   We need to ensure they stay inside our padded block.
+*/
+.tinted-block .cm-formatting-list,
+.tinted-block .cm-formatting-quote {
+    /* Reset negative positioning if needed, but usually increasing padding on the container is enough.
+       However, if Obsidian uses absolute positioning for bullets: */
+    position: relative !important;
+    left: 0 !important;
+}
+
+/* Ensure list items inside the block have enough padding */
+.tinted-block .cm-list-1,
+.tinted-block .cm-list-2,
+.tinted-block .cm-list-3,
+.tinted-block .cm-quote {
+    /* Add left padding to the content itself if it's pushed out? 
+       Actually, Obsidian's lists are often just spans inside the line.
+       The issue is likely that the bullet is in the "gutter" created by padding.
+       If we add padding to the line container, the bullet moves with it.
+       BUT if the bullet has negative margin-left, it might move "out" of the content box.
+       Since we set background on the container, we need to make sure the bullet is inside the background.
+    */
+}
+
+/* Force block display to contain floating/absolute children visually if needed */
+.tinted-block {
+    display: block !important;
+    /* Use box-decoration-break to handle wrapping if it were inline, but these are lines */
+}
+
+/* 
+   Start Line (Marker)
+*/
+.tinted-block-start {
+    /* Top rounded corners - Changed to 8px */
+    border-top-left-radius: 6px !important;
+    border-top-right-radius: 6px !important;
+    
+    /* Extra top padding - Changed to 12px */
+    padding-top: 0 !important;
+    
+    /* Font size 60% of standard text */
+    font-size: 67% !important;
+    /* Adjust line-height to match font size scaling, or inherit but usually smaller is better */
+    line-height: 1.2 !important; 
+    
+    /* Default: Text is hidden (transparent), but background remains */
+    color: transparent !important;
+    
+    /* Transition for smooth reveal */
+    transition: color 0.2s ease;
+}
+
+/* 
+   End Line (Marker)
+*/
+.tinted-block-end {
+    /* Bottom rounded corners - Changed to 8px */
+    border-bottom-left-radius: 6px !important;
+    border-bottom-right-radius: 6px !important;
+    
+    /* Extra bottom padding - Changed to 12px */
+    padding-bottom: 0 !important;
+    
+    /* Font size 60% */
+    font-size: 67% !important;
+    line-height: 1.2 !important;
+
+    /* Default: Text is hidden */
+    color: transparent !important;
+    
+    transition: color 0.2s ease;
+}
+
+/* 
+   Active State (Cursor Inside)
+   When the block is active (cursor inside), reveal marker text at 60% opacity of tint color
+*/
+.tinted-block-active.tinted-block-start,
+.tinted-block-active.tinted-block-end {
+    color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 60%, transparent) !important;
+}
+
+/* =========================================
+   Reading View (Preview) Fixes
+   ========================================= */
+
+/* Reading View uses actual HTML elements like <ul>, <p>, <blockquote>.
+   We apply .tinted-block to these elements.
+*/
+
+/* Apply styles to Reading View blocks */
+.tinted-block-preview {
+    background-color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 10%, transparent) !important;
+    color: var(--tint-color, var(--text-normal)) !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    border: none !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    display: block !important;
+    /* Ensure lists inside have correct indentation */
+}
+
+/* Fix for lists in Reading View */
+.tinted-block-preview ul,
+.tinted-block-preview ol {
+    padding-left: 2em !important; /* Ensure bullets are inside */
+    margin-block-start: 0 !important;
+    margin-block-end: 0 !important;
+}
+
+/* Fix for Blockquotes in Reading View */
+.tinted-block-preview blockquote {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Start/End Markers in Preview */
+.tinted-block-preview.tinted-block-start {
+    border-top-left-radius: 6px !important;
+    border-top-right-radius: 6px !important;
+    padding-top: 0 !important; /* Match user preference */
+    font-size: 67% !important;
+    line-height: 1.2 !important;
+    color: transparent !important; /* Hidden by default */
+}
+
+.tinted-block-preview.tinted-block-end {
+    border-bottom-left-radius: 6px !important;
+    border-bottom-right-radius: 6px !important;
+    padding-bottom: 0 !important;
+    font-size: 67% !important;
+    line-height: 1.2 !important;
+    color: transparent !important;
+}
+
+/* Preview Hover State (Since no cursor tracking in preview easily, we use hover) */
+.tinted-block-preview.tinted-block-start:hover,
+.tinted-block-preview.tinted-block-end:hover {
+    color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 60%, transparent) !important;
+}
