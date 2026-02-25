@@ -381,116 +381,259 @@ export default class MyBlockPlugin extends Plugin {
         }
     }
 
+    // Helper to validate/normalize color (Exposed for reuse if needed, but here it's fine)
+    normalizeColor(raw: string): string {
+        // Debug Log
+        // console.log(`[Tinted Blocks] Normalizing color: '${raw}'`);
+
+        // Strict Validation Rule:
+        // 1. If empty -> Default
+        if (!raw) {
+            // console.log(`[Tinted Blocks] Empty -> Default`);
+            return this.settings.defaultColor;
+        }
+
+        // 2. If starts with space -> Default (Invalid syntax)
+        if (raw.startsWith(' ')) {
+            // console.log(`[Tinted Blocks] Starts with space -> Default`);
+            return this.settings.defaultColor;
+        }
+        
+        // 3. If contains space -> Default (Invalid syntax)
+        if (raw.includes(' ')) {
+             // console.log(`[Tinted Blocks] Contains space -> Default`);
+             return this.settings.defaultColor;
+        }
+
+        // 4. Strictest Check: Assign to style.color and see if it sticks
+        const s = new Option().style;
+        s.color = raw;
+        // If s.color is empty string, it means the browser rejected it.
+        if (s.color === '') {
+             // console.log(`[Tinted Blocks] Invalid CSS color (rejected by browser) -> Default`);
+             return this.settings.defaultColor;
+        }
+
+        // console.log(`[Tinted Blocks] Valid color -> '${raw}'`);
+        return raw;
+    }
+
+    // Use MutationObserver instead of timeout for reliable detection
+    private activeObservers = new Map<HTMLElement, MutationObserver>();
+
+    queueWrapping(element: HTMLElement) {
+        if (!element.parentElement) {
+            // Wait for attachment
+            let attempts = 0;
+            const checkParent = () => {
+                if (element.parentElement) {
+                    this.setupObserver(element.parentElement);
+                } else if (attempts < 10) {
+                    attempts++;
+                    window.setTimeout(checkParent, 20);
+                }
+            };
+            checkParent();
+        } else {
+            this.setupObserver(element.parentElement);
+        }
+    }
+
+    setupObserver(container: HTMLElement) {
+        if (this.activeObservers.has(container)) return;
+
+        // Debounce the actual processing
+        let timeout: number | null = null;
+        
+        const process = () => {
+            this.wrapMarkedBlocks(container);
+        };
+
+        const observer = new MutationObserver((mutations) => {
+            if (timeout) window.clearTimeout(timeout);
+            timeout = window.setTimeout(process, 100);
+        });
+
+        observer.observe(container, { childList: true });
+        this.activeObservers.set(container, observer);
+        
+        // Also trigger once initially in case everything is already there
+        if (timeout) window.clearTimeout(timeout);
+        timeout = window.setTimeout(process, 100);
+    }
+    
+    wrapMarkedBlocks(container: HTMLElement) {
+        const children = Array.from(container.children) as HTMLElement[];
+        
+        let startEl: HTMLElement | null = null;
+        let elementsToWrap: HTMLElement[] = [];
+        let currentColor = "";
+        let startMarkerText = "";
+
+        for (const child of children) {
+            // Check if this element is a start marker
+            if (child.dataset.tintedStart) {
+                startEl = child;
+                currentColor = child.dataset.tintedColor || "";
+                startMarkerText = child.dataset.tintedStartMarker || "";
+                elementsToWrap = [child];
+                
+                // If it's also an end marker (single line block)
+                if (child.dataset.tintedEnd) {
+                     this.performWrap(container, elementsToWrap, currentColor, startMarkerText, child.dataset.tintedEndMarker || "");
+                     startEl = null;
+                     elementsToWrap = [];
+                }
+                continue;
+            }
+
+            if (startEl) {
+                elementsToWrap.push(child);
+                
+                if (child.dataset.tintedEnd) {
+                    // Found end
+                    this.performWrap(container, elementsToWrap, currentColor, startMarkerText, child.dataset.tintedEndMarker || "");
+                    startEl = null;
+                    elementsToWrap = [];
+                }
+            }
+        }
+    }
+
+    performWrap(container: HTMLElement, elements: HTMLElement[], color: string, startMarker: string, endMarker: string) {
+        if (elements.length === 0) return;
+        
+        // Strategy: Apply classes to existing elements instead of wrapping
+        // This prevents Obsidian's DOM diffing from flattening our wrapper
+        
+        elements.forEach((el, index) => {
+            el.addClass("tinted-block-item");
+            el.style.setProperty("--tint-color", color);
+            
+            if (index === 0) {
+                el.addClass("tinted-block-item-start");
+            }
+            if (index === elements.length - 1) {
+                el.addClass("tinted-block-item-end");
+            }
+            
+            // Cleanup attributes
+            el.removeAttribute('data-tinted-start');
+            el.removeAttribute('data-tinted-end');
+            el.removeAttribute('data-tinted-color');
+            el.removeAttribute('data-tinted-start-marker');
+            el.removeAttribute('data-tinted-end-marker');
+        });
+
+        // Clean text
+        // Start
+        const firstEl = elements[0];
+        if (elements.length > 0 && startMarker && firstEl) {
+             this.removeTextFromStart(firstEl, startMarker);
+        }
+        // End
+        const lastEl = elements[elements.length-1];
+        if (elements.length > 0 && endMarker && lastEl) {
+             this.removeTextFromEnd(lastEl, endMarker);
+        }
+    }
+
     processPreviewMode(element: HTMLElement, context: MarkdownPostProcessorContext) {
         // 1. Inline Highlight
         this.processInlineHighlight(element);
 
         // 2. Block Highlight (Reading View)
-        // In Reading View, Obsidian calls this for every block (p, ul, etc.).
-        // We need to determine if this block is inside a tinted block range.
+        // Mark elements and queue wrapping
         
-        const sectionInfo = context.getSectionInfo(element);
-        if (!sectionInfo) return;
-
-        const lines = sectionInfo.text.split('\n');
-        const startLineNum = sectionInfo.lineStart;
-        const endLineNum = sectionInfo.lineEnd;
         const startMarker = this.settings.blockStartMarker;
         const endMarker = this.settings.blockEndMarker;
-        
         const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const startRegex = new RegExp(`^${escapeRegExp(startMarker)}(.*)$`);
-        const endRegex = new RegExp(`^${escapeRegExp(endMarker)}\\s*$`);
-
-        // We need to find the "Active" block for this element.
-        // Since we don't have global state easily in post-processor without scanning,
-        // we scan the whole document text to find all blocks.
-        // Optimization: In a real large file, we might want to cache this map based on content hash,
-        // but for now, we scan.
         
-        const blocks: {start: number, end: number, color: string}[] = [];
-        let currentStart = -1;
-        let currentColor = "";
+        const startRegex = new RegExp(`^\\s*${escapeRegExp(startMarker)}(.*)`); 
+        const endRegex = new RegExp(`${escapeRegExp(endMarker)}\\s*$`); 
+        
+        let children = Array.from(element.children) as HTMLElement[];
+        if (children.length === 0) children = [element];
 
-        // Helper to validate/normalize color
-        const normalizeColor = (raw: string): string => {
-            // We do NOT trim initially to detect leading spaces.
-            if (!raw) return pluginInstance.settings.defaultColor;
+        let hasWork = false;
 
-            // 2. If starts with space, treat as invalid -> default color
-            // This enforces NO space separator.
-            if (raw.startsWith(' ')) return pluginInstance.settings.defaultColor;
-
-            const c = raw.trim(); // Now we can trim trailing spaces if any
-
-            // 3. If contains spaces (e.g. "bg blue"), treat as invalid -> default color
-            if (c.includes(' ')) return pluginInstance.settings.defaultColor;
-
-            // 4. Check validity using CSS.supports
-            if (window.CSS && window.CSS.supports && !window.CSS.supports('color', c)) {
-                return pluginInstance.settings.defaultColor;
+        for (const child of children) {
+            const text = child.textContent || "";
+            
+            // Check Start
+            const startMatch = text.match(startRegex);
+            if (startMatch) {
+                // Mark the ELEMENT (wrapper), not just the child
+                element.dataset.tintedStart = "true";
+                element.dataset.tintedStartMarker = startMatch[0]; 
+                
+                const rawColor = startMatch[1] || "";
+                element.dataset.tintedColor = this.normalizeColor(rawColor);
+                hasWork = true;
             }
 
-            return c;
-        };
-
-        // Scan all lines to build block map
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line === undefined) continue;
-            const startMatch = line.match(startRegex);
-            const endMatch = line.match(endRegex);
-
-            if (startMatch) {
-                currentStart = i;
-                currentColor = normalizeColor(startMatch[1] || "");
-            } else if (endMatch && currentStart !== -1) {
-                blocks.push({ start: currentStart, end: i, color: currentColor });
-                currentStart = -1;
-                currentColor = "";
+            // Check End
+            const endMatch = text.match(endRegex);
+            if (endMatch) {
+                element.dataset.tintedEnd = "true";
+                element.dataset.tintedEndMarker = endMatch[0];
+                hasWork = true;
             }
         }
 
-        // Check if current element falls into any block
-        // The element spans from startLineNum to endLineNum
+        if (hasWork) {
+            this.queueWrapping(element);
+        }
+    }
+
+    // Robust text removal helpers
+    removeTextFromStart(element: HTMLElement, textToRemove: string) {
+        // We traverse text nodes and eat characters until we removed enough.
+        // textToRemove might contain characters that are technically in different nodes or split?
+        // Usually textToRemove is from textContent, so it ignores markup.
+        // We just need to remove 'N' characters from the start of the text content flow.
         
-        for (const block of blocks) {
-            // Case 1: Element is the start marker itself (or contains it)
-            // Usually start marker is a single paragraph
-            const isStart = (startLineNum === block.start);
+        let charsLeft = textToRemove.length;
+        
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+        let node = walker.nextNode();
+        
+        while (node && charsLeft > 0) {
+            const val = node.textContent || "";
+            if (val.length <= charsLeft) {
+                charsLeft -= val.length;
+                node.textContent = "";
+                node = walker.nextNode();
+            } else {
+                node.textContent = val.substring(charsLeft);
+                charsLeft = 0;
+            }
+        }
+    }
+
+    removeTextFromEnd(element: HTMLElement, textToRemove: string) {
+        const nodes: Node[] = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+        let node;
+        while(node = walker.nextNode()) nodes.push(node);
+        
+        let charsToCut = textToRemove.length;
+        
+        // Iterate backwards
+        for (let i = nodes.length - 1; i >= 0; i--) {
+            if (charsToCut <= 0) break;
             
-            // Case 2: Element is the end marker itself
-            const isEnd = (endLineNum === block.end); // Note: endLineNum is inclusive in sectionInfo? 
-            // Actually sectionInfo.lineEnd is usually the line number of the end of the block.
-            // If the element is just the end marker line, start=end=block.end
+            const n = nodes[i];
+            if (!n) continue; // Safety check
             
-            // Case 3: Element is strictly inside
-            // e.g. block start=5, end=10. Element is 6-9.
-            // Or Element is 6-6.
-            const isInside = (startLineNum > block.start && endLineNum < block.end);
+            const val = n.textContent || "";
             
-            // Case 4: Element overlaps? Usually Obsidian breaks sections by blocks.
-            // But a list could trigger this.
-            
-            if (isStart || isEnd || isInside) {
-                // Apply base class
-                element.addClass("tinted-block-preview");
-                element.style.setProperty("--tint-color", block.color);
-                
-                if (isStart) {
-                    element.addClass("tinted-block-start");
-                    // We need to make sure the text is correct for styling
-                    // In Reading View, Obsidian renders the text. 
-                    // If we want to hide it, CSS `color: transparent` handles it.
-                }
-                
-                if (isEnd) {
-                    element.addClass("tinted-block-end");
-                }
-                
-                // If it's a list or quote inside, we might want to add helper classes if CSS selector isn't enough
-                // But CSS `.tinted-block-preview ul` should work.
-                break; // Found the block, stop.
+            if (val.length <= charsToCut) {
+                charsToCut -= val.length;
+                n.textContent = "";
+            } else {
+                n.textContent = val.substring(0, val.length - charsToCut);
+                charsToCut = 0;
             }
         }
     }

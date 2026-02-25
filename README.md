@@ -7,7 +7,7 @@
 ## ✨ Features
 
 - **Dynamic Coloring**: Use any valid CSS color name (`blue`, `red`, `gold`) or hex code (`#ff00aa`).
-- **Smart Visibility**: Block markers (`::>`) automatically fade away when you're not editing the block, keeping your reading experience clean.
+- **Clean Reading View**: Block markers (`::>`) are completely removed in Reading View, leaving only your beautifully styled content.
 - **Rich Content Support**: Works perfectly with **bullet lists**, **numbered lists**, and **blockquotes** inside the colored block.
 - **Inline Highlighting**: Highlight specific words or phrases within a line.
 - **Native Integration**: Use the **Command Palette**, **Right-Click Menu**, or customize **Hotkeys**.
@@ -26,12 +26,16 @@ It supports **Markdown** formatting.
 <::
 ```
 
-You can use any color format, but **do not add a space** after the marker:
-- `::>red` (Standard CSS names)
-- `::>#4caf50` (Hex codes)
-- `::>rgb(100,200,255)` (RGB values)
+**Strict Syntax Rules:**
+- **No Space**: You must type the color immediately after the marker (e.g., `::>red`, NOT `::> red`).
+- **Valid CSS Colors**: Use standard CSS colors or hex codes.
+- **Fallback**: If you add a space (`::> red`), use an invalid color (`::>bg-red`), or omit the color (`::>`), the block will use your **Default Block Color** setting.
 
-If you omit the color (e.g., just `::>`) or type an invalid color (e.g., `::> invalid` or `::> bg-red`), it defaults to your configured **Default Block Color**.
+Examples:
+- `::>blue` -> Blue background
+- `::>#ff0000` -> Red background
+- `::> blue` -> **Default Color** (Space is not allowed)
+- `::>bg-blue` -> **Default Color** (Invalid CSS color name)
 
 ### Method 2: The "Mouse" Way (Context Menu)
 1. Select any text in your editor.

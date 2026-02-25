@@ -119,64 +119,59 @@
 }
 
 /* =========================================
-   Reading View (Preview) Fixes
+   Reading View (Preview) - Class-Based Mode
    ========================================= */
 
-/* Reading View uses actual HTML elements like <ul>, <p>, <blockquote>.
-   We apply .tinted-block to these elements.
-*/
-
-/* Apply styles to Reading View blocks */
-.tinted-block-preview {
+/* The base class for all items in a block */
+.tinted-block-item {
     background-color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 10%, transparent) !important;
     color: var(--tint-color, var(--text-normal)) !important;
-    /* Match the same visual inset technique in Preview */
-    border-left: 12px solid transparent !important;
-    border-right: 12px solid transparent !important;
-    background-clip: border-box !important;
-    border-top: none !important;
-    border-bottom: none !important;
+    
+    /* Box model adjustments */
+    padding: 0 12px !important; /* Left/Right padding */
     margin-top: 0 !important;
     margin-bottom: 0 !important;
+    
+    /* Ensure background fills width */
     display: block !important;
-    /* Ensure lists inside have correct indentation */
+    position: relative !important;
+    
+    /* Remove default borders/radius */
+    border-radius: 0 !important;
 }
 
-/* Fix for lists in Reading View */
-.tinted-block-preview ul,
-.tinted-block-preview ol {
-    padding-left: 2em !important; /* Ensure bullets are inside */
-    margin-block-start: 0 !important;
-    margin-block-end: 0 !important;
+/* First item in the block */
+.tinted-block-item-start {
+    /* Top rounded corners */
+    border-top-left-radius: 8px !important;
+    border-top-right-radius: 8px !important;
+    
+    /* Top padding */
+    padding-top: 12px !important;
+    
+    /* Add top margin back */
+    margin-top: 1em !important;
 }
 
-/* Fix for Blockquotes in Reading View */
-.tinted-block-preview blockquote {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
+/* Last item in the block */
+.tinted-block-item-end {
+    /* Bottom rounded corners */
+    border-bottom-left-radius: 8px !important;
+    border-bottom-right-radius: 8px !important;
+    
+    /* Bottom padding */
+    padding-bottom: 12px !important;
+    
+    /* Add bottom margin back */
+    margin-bottom: 1em !important;
 }
 
-/* Start/End Markers in Preview */
-.tinted-block-preview.tinted-block-start {
-    border-top-left-radius: 6px !important;
-    border-top-right-radius: 6px !important;
-    padding-top: 0 !important; /* Match user preference */
-    font-size: 67% !important;
-    line-height: 1.2 !important;
-    color: transparent !important; /* Hidden by default */
+/* Fix for lists inside items */
+.tinted-block-item ul,
+.tinted-block-item ol {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
 }
 
-.tinted-block-preview.tinted-block-end {
-    border-bottom-left-radius: 6px !important;
-    border-bottom-right-radius: 6px !important;
-    padding-bottom: 0 !important;
-    font-size: 67% !important;
-    line-height: 1.2 !important;
-    color: transparent !important;
-}
-
-/* Preview Hover State (Since no cursor tracking in preview easily, we use hover) */
-.tinted-block-preview.tinted-block-start:hover,
-.tinted-block-preview.tinted-block-end:hover {
-    color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 60%, transparent) !important;
-}
+/* Cleanup old preview styles if no longer used */
+/* .tinted-block-preview ... removed */
