@@ -117,3 +117,27 @@ When working with complex CodeMirror widgets (like tables in Obsidian):
 - **Respect Boundaries**: Don't let DOM scanners touch the internals of nested editors.
 - **Use Native Tools**: Use CodeMirror Decorations for text inside editors, and DOM manipulation only for the container/widget structure.
 - **Mode Awareness**: Always check the view mode (Source vs Live Preview) before applying heavy visual changes.
+
+## 10. Horizontal Rule (HR) Styling in Live Preview
+
+### The Challenge: White Bar Background
+- **Problem**: When a Horizontal Rule (`---`) was placed inside a tinted block, it rendered as a white bar (from the default theme) with a thin line, breaking the colored block aesthetic.
+- **Cause**: Obsidian's internal `hr` rendering applies a background color to the container div, which overrides our block's background color due to specificity or render order.
+- **Initial Failure**: Using `Prec.high` in `StateField` decorations didn't consistently fix it because Obsidian's DOM updates would sometimes strip our classes or styles after our decoration logic ran.
+
+### The Solution: ViewPlugin + CSS Patch
+1.  **ViewPlugin for Robustness**:
+    - Implemented a `ViewPlugin` that runs after every view update (using `requestAnimationFrame`).
+    - It manually checks visible lines (`.cm-line`), determines if they belong to a tinted block, and forces the `tinted-block` class and `--tint-color` style onto the DOM element. This ensures our styles persist even if Obsidian refreshes the line.
+
+2.  **CSS Pseudo-Element for the Line**:
+    - **Hide Default HR**: We hide the default `<hr>` element (or whatever Obsidian renders inside) using `display: none !important`.
+    - **Custom Rendering**: We use `::after` on the container to draw the line ourselves:
+        - `position: absolute; top: 50%`: Vertically centered.
+        - `height: 1px`: Thin line.
+        - `width: 100%`: Spanning full width.
+        - `background-color`: Calculated using `color-mix` to be 80% transparent version of the block's tint color.
+    - **Layout Fix**: Set `display: block` and `line-height: normal` on the container to ensure it maintains the correct height (preventing it from collapsing to 0px or looking squeezed).
+
+### Key Takeaway
+For elements that Obsidian heavily styles or manages (like HRs, Callouts, etc.), standard CodeMirror decorations might be insufficient. A `ViewPlugin` that patches the DOM *after* the render cycle is a more reliable brute-force method to ensure your styles win.

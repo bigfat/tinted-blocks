@@ -33,6 +33,41 @@
 }
 
 /* 
+   Horizontal Rules inside Tinted Blocks
+   Target the HR line container explicitly.
+   We need to ensure this has higher specificity than Obsidian's default HR styles.
+   Obsidian often uses: .markdown-source-view.mod-cm6 .hr { background-color: ... }
+*/
+.tinted-block.hr,
+.cm-line.tinted-block.hr {
+    background-color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 10%, transparent) !important;
+    display: block;
+    line-height: normal; /* Restore normal height */
+    position: relative;
+    /* Ensure child HR is hidden or repurposed */
+}
+
+/* Hide the default HR rendering if it's a border or background on a child */
+.tinted-block.hr hr,
+.cm-line.tinted-block.hr hr {
+    display: none !important;
+}
+
+/* Create our own line using ::after */
+.tinted-block.hr::after,
+.cm-line.tinted-block.hr::after {
+    content: "";
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 20%, transparent); /* 80% transparent = 20% opacity */
+    transform: translateY(-50%);
+}
+
+/* 
    Live Preview List/Quote Fixes
    Lists and blockquotes often use negative text-indent or margins.
    We need to ensure they stay inside our padded block.

@@ -67,6 +67,13 @@ export function createInlineHighlighter(plugin: IPlugin) {
                     const colorCode = match[1]; // r, g, b, y, c, m or undefined
                     const content = match[2] || "";
                     
+                    // EXCEPTION: Empty content (::::) should not be highlighted
+                    // If content is empty AND colorCode is undefined, it means we matched ::::
+                    // match[0] would be "::::"
+                    if (!colorCode && content === "") {
+                         continue;
+                    }
+
                     // Determine Color Class
                     let colorClass = 'tinted-inline-yellow'; // default
                     if (colorCode === 'r') colorClass = 'tinted-inline-red';

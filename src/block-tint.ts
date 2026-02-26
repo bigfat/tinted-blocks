@@ -1,6 +1,6 @@
 
-import { RangeSetBuilder, StateField, EditorState } from '@codemirror/state';
-import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
+import { RangeSetBuilder, StateField, EditorState, Prec } from '@codemirror/state';
+import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { MyPluginSettings } from './settings';
 import { normalizeColor, removeTextFromStart, removeTextFromEnd } from './utils';
 
@@ -88,14 +88,106 @@ function buildBlockDecorations(state: EditorState, plugin: IPlugin): DecorationS
     return builder.finish();
 }
 
-export const createBlockTinter = (plugin: IPlugin) => StateField.define<DecorationSet>({
-    create(state) { return buildBlockDecorations(state, plugin); },
-    update(oldDecos, tr) {
-        if (tr.docChanged || tr.selection) return buildBlockDecorations(tr.state, plugin);
-        return oldDecos;
-    },
-    provide: field => EditorView.decorations.from(field)
-});
+export const createBlockTinter = (plugin: IPlugin) => [
+    StateField.define<DecorationSet>({
+        create(state) { return buildBlockDecorations(state, plugin); },
+        update(oldDecos, tr) {
+            if (tr.docChanged || tr.selection) return buildBlockDecorations(tr.state, plugin);
+            return oldDecos;
+        },
+        provide: field => EditorView.decorations.from(field)
+    }),
+    // ViewPlugin to handle edge cases like Horizontal Rules where StateField decorations might be overridden
+    ViewPlugin.fromClass(class {
+        constructor(view: EditorView) {
+            this.patchDOM(view);
+        }
+
+        update(update: ViewUpdate) {
+            if (update.docChanged || update.viewportChanged || update.selectionSet) {
+                this.patchDOM(update.view);
+            }
+        }
+
+        patchDOM(view: EditorView) {
+            if (!plugin || !plugin.settings.enableBlockTint) return;
+            
+            // Re-calculate blocks from state (cheap enough)
+            const doc = view.state.doc;
+            const startMarker = plugin.settings.blockStartMarker;
+            const endMarker = plugin.settings.blockEndMarker;
+            const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const startRegex = new RegExp(`^${escapeRegExp(startMarker)}(.*)$`);
+            const endRegex = new RegExp(`^${escapeRegExp(endMarker)}\\s*$`);
+
+            const blocks: {start: number, end: number, color: string}[] = [];
+            let currentStart = -1;
+            let currentColor = "";
+
+            // Identify blocks in the document
+            for (let i = 1; i <= doc.lines; i++) {
+                const line = doc.line(i);
+                const startMatch = line.text.match(startRegex);
+                const endMatch = line.text.match(endRegex);
+
+                if (startMatch) {
+                    currentStart = i;
+                    currentColor = normalizeColor(startMatch[1] || "", plugin.settings);
+                } else if (endMatch && currentStart !== -1) {
+                    blocks.push({ start: currentStart, end: i, color: currentColor });
+                    currentStart = -1;
+                    currentColor = "";
+                }
+            }
+            
+            // Map blocks to line numbers
+            const lineColors = new Map<number, string>();
+            for (const block of blocks) {
+                // We only care about "mid" lines for HR patching, but let's map all
+                for (let k = block.start; k <= block.end; k++) {
+                    lineColors.set(k, block.color);
+                }
+            }
+
+            // Iterate visible DOM elements
+            // We use requestAnimationFrame to ensure we run AFTER Obsidian's updates
+            requestAnimationFrame(() => {
+                const lines = view.contentDOM.querySelectorAll('.cm-line');
+                lines.forEach((lineEl: HTMLElement) => {
+                    // Get line number for this DOM element
+                    // posAtDOM returns the position in the document
+                    try {
+                        const pos = view.posAtDOM(lineEl);
+                        const lineObj = view.state.doc.lineAt(pos);
+                        const lineNumber = lineObj.number;
+                        
+                        const color = lineColors.get(lineNumber);
+                        
+                        if (color) {
+                            // This line SHOULD be tinted
+                            if (!lineEl.classList.contains('tinted-block')) {
+                                lineEl.classList.add('tinted-block');
+                                lineEl.style.setProperty('--tint-color', color);
+                            }
+                            // Ensure style is correct even if class exists
+                            if (lineEl.style.getPropertyValue('--tint-color') !== color) {
+                                lineEl.style.setProperty('--tint-color', color);
+                            }
+                        } else {
+                            // Should NOT be tinted
+                             if (lineEl.classList.contains('tinted-block')) {
+                                lineEl.classList.remove('tinted-block');
+                                lineEl.style.removeProperty('--tint-color');
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore errors if DOM pos is invalid (e.g. detached)
+                    }
+                });
+            });
+        }
+    })
+];
 
 
 // ============================================================

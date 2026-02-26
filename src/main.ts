@@ -163,15 +163,38 @@ export default class MyBlockPlugin extends Plugin {
 
         if (foundStart && foundEnd) {
             // Remove the block
+            // Order matters: remove bottom first so line numbers don't shift
             editor.replaceRange('', { line: endLine, ch: 0 }, { line: endLine + 1, ch: 0 });
             editor.replaceRange('', { line: startLine, ch: 0 }, { line: startLine + 1, ch: 0 });
         } else {
             // Add block
-            const selection = editor.getSelection();
-            if (selection) {
-                const newText = `${startMarker}\n${selection}\n${endMarker}\n`;
-                editor.replaceSelection(newText);
+            if (editor.somethingSelected()) {
+                const selectionStart = editor.getCursor('from');
+                const selectionEnd = editor.getCursor('to');
+                
+                const startLine = selectionStart.line;
+                const endLine = selectionEnd.line;
+                
+                // If selection ends at the start of a line (e.g. standard line selection), don't include that line
+                let effectiveEndLine = endLine;
+                if (selectionEnd.ch === 0 && selectionEnd.line > selectionStart.line) {
+                    effectiveEndLine = endLine - 1;
+                }
+
+                // Insert End Marker AFTER the last line
+                editor.replaceRange(
+                    `\n${endMarker}\n`,
+                    { line: effectiveEndLine, ch: editor.getLine(effectiveEndLine).length }
+                );
+                
+                // Insert Start Marker BEFORE the first line
+                editor.replaceRange(
+                    `${startMarker}\n`,
+                    { line: startLine, ch: 0 }
+                );
+
             } else {
+                // No selection: wrap current line
                 const lineContent = editor.getLine(cursor.line);
                 editor.replaceRange(
                     `${startMarker}\n${lineContent}\n${endMarker}\n`,
@@ -183,21 +206,166 @@ export default class MyBlockPlugin extends Plugin {
     }
 
     toggleInlineHighlight(editor: Editor) {
-        const selection = editor.getSelection();
         const marker = this.settings.inlineMarker;
         const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        
         const fullRegex = new RegExp(`^${escapedMarker}(?:[rgbycm]:)?(.*)${escapedMarker}$`);
-        
-        if (selection.match(fullRegex)) {
-             // Unwrap
-             const match = selection.match(fullRegex);
-             if (match) {
-                 editor.replaceSelection(match[1] || "");
-             }
+
+        if (editor.somethingSelected()) {
+             const selection = editor.getSelection();
+             if (selection.match(fullRegex)) {
+                 // Unwrap
+                 const match = selection.match(fullRegex);
+                 if (match) {
+                     editor.replaceSelection(match[1] || "");
+                 }
+            } else {
+                // Check if the selection is ALREADY wrapped by markers, but user selected markers too
+                // e.g. selected "::text::"
+                // The fullRegex check above handles "::text::" or "::r:text::" if selected fully.
+                
+                // What if user selected "text" inside "::text::"?
+                // We should check the surroundings of the selection.
+                
+                const start = editor.getCursor('from');
+                const end = editor.getCursor('to');
+                
+                const beforeRange = editor.getRange(
+                    { line: start.line, ch: Math.max(0, start.ch - marker.length) },
+                    start
+                );
+                const afterRange = editor.getRange(
+                    end,
+                    { line: end.line, ch: end.ch + marker.length }
+                );
+                
+                if (beforeRange === marker && afterRange === marker) {
+                    // It is wrapped! Unwrap it.
+                    // Remove end marker first
+                    editor.replaceRange('', end, { line: end.line, ch: end.ch + marker.length });
+                    editor.replaceRange('', { line: start.line, ch: start.ch - marker.length }, start);
+                    
+                    // Restore selection? 
+                    // The offsets shifted.
+                    // Start shifted back by marker.length.
+                    // End shifted back by marker.length (because start shifted) AND removed end marker (another marker.length) -> Total 2*marker.length?
+                    // Wait.
+                    // Start position: we removed `marker` BEFORE start. So new start is start.ch - marker.length.
+                    // End position: we removed `marker` AFTER end. AND we removed `marker` BEFORE start (which is before end).
+                    // So new end is end.ch - marker.length.
+                    
+                    editor.setSelection(
+                        { line: start.line, ch: start.ch - marker.length },
+                        { line: end.line, ch: end.ch - marker.length }
+                    );
+                    
+                    return;
+                }
+
+                // Check if multi-line
+                
+                if (start.line !== end.line) {
+                    // Multi-line selection: Wrap segments per line
+                    // 1. First line: from start.ch to end of line
+                    // 2. Middle lines: full line
+                    // 3. Last line: from 0 to end.ch
+                    
+                    const doc = editor.getDoc();
+                    let newText = "";
+                    
+                    for (let i = start.line; i <= end.line; i++) {
+                        const lineText = editor.getLine(i);
+                        
+                        let segment = "";
+                        if (i === start.line) {
+                            segment = lineText.substring(start.ch);
+                        } else if (i === end.line) {
+                            segment = lineText.substring(0, end.ch);
+                        } else {
+                            segment = lineText;
+                        }
+                        
+                        // Wrap segment if not empty
+                        if (segment) {
+                            segment = `${marker}${segment}${marker}`;
+                        }
+                        
+                        if (i > start.line) {
+                            newText += "\n";
+                        }
+                        newText += segment;
+                    }
+                    
+                    editor.replaceSelection(newText);
+                    
+                } else {
+                    // Single line
+                    editor.replaceSelection(`${marker}${selection}${marker}`);
+                    
+                    // Restore selection to cover the original text (excluding markers)
+                    // Current cursor is at the end of the inserted text
+                    const newHead = editor.getCursor('head');
+                    const newAnchor = editor.getCursor('anchor');
+                    
+                    // We want to select "selection"
+                    // Start: newHead - marker.length - selection.length
+                    // End: newHead - marker.length
+                    
+                    // Wait, replaceSelection puts cursor at end of replacement usually?
+                    // Or it preserves selection direction?
+                    // Obsidian API `replaceSelection` usually places cursor at end of inserted text.
+                    
+                    // Let's calculate manually based on original `start`
+                    editor.setSelection(
+                        { line: start.line, ch: start.ch + marker.length },
+                        { line: end.line, ch: end.ch + marker.length }
+                    );
+                }
+            }
         } else {
-            // Wrap
-            editor.replaceSelection(`${marker}${selection}${marker}`);
+            // No selection: Auto-expand to word
+            const cursor = editor.getCursor();
+            const wordRange = editor.wordAt(cursor);
+            if (wordRange) {
+                const wordText = editor.getRange(wordRange.from, wordRange.to);
+                
+                // Check if the word is already wrapped
+                // We need to look at the text surrounding the wordRange
+                const beforeRange = editor.getRange(
+                    { line: wordRange.from.line, ch: Math.max(0, wordRange.from.ch - marker.length) },
+                    wordRange.from
+                );
+                const afterRange = editor.getRange(
+                    wordRange.to,
+                    { line: wordRange.to.line, ch: wordRange.to.ch + marker.length }
+                );
+                
+                if (beforeRange === marker && afterRange === marker) {
+                    // It is wrapped! Unwrap it.
+                    // Remove end marker first to keep positions valid
+                    editor.replaceRange('', wordRange.to, { line: wordRange.to.line, ch: wordRange.to.ch + marker.length });
+                    editor.replaceRange('', { line: wordRange.from.line, ch: wordRange.from.ch - marker.length }, wordRange.from);
+                    
+                    // Restore cursor position relative to word
+                    // Original cursor: cursor.ch
+                    // New cursor: cursor.ch - marker.length
+                    editor.setCursor({ line: cursor.line, ch: cursor.ch - marker.length });
+                } else {
+                    // Not wrapped. Wrap it.
+                    editor.replaceRange(`${marker}${wordText}${marker}`, wordRange.from, wordRange.to);
+                    
+                    // Restore cursor position relative to word
+                    // Original cursor: cursor.ch
+                    // New cursor: cursor.ch + marker.length
+                    editor.setCursor({ line: cursor.line, ch: cursor.ch + marker.length });
+                }
+            } else {
+                 // No word found? Just insert empty markers?
+                 // Standard behavior: insert empty markers
+                 editor.replaceSelection(`${marker}${marker}`);
+                 // Move cursor inside
+                 const newCursor = editor.getCursor();
+                 editor.setCursor({ line: newCursor.line, ch: newCursor.ch - marker.length });
+            }
         }
     }
 
