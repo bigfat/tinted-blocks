@@ -433,6 +433,15 @@ function createTableTintPlugin() {
                 // match[0] is e.g. " :r:"
                 // The text node might contain " :r: content"
                 while (node) {
+                    // Check if node is inside a CodeMirror line (source text)
+                    // We only want to process preview/widget content, not editable source text
+                    // which should be handled by Decorations.
+                    const parent = node.parentElement;
+                    if (parent && parent.closest('.cm-line')) {
+                         node = walker.nextNode();
+                         continue;
+                    }
+
                     if (node.textContent && node.textContent.includes(marker)) {
                          foundNode = node;
                          break;
@@ -453,7 +462,7 @@ function createTableTintPlugin() {
                         const afterText = text.substring(markerIndex + marker.length);
                         
                         const newWrapper = document.createElement('span');
-                        newWrapper.className = 'tinted-cell-marker-wrapper';
+                        newWrapper.className = 'tinted-cell-marker-wrapper tinted-inline-marker tinted-cell-marker-visible'; // Add visible class by default
                         newWrapper.textContent = marker;
                         // Important: CodeMirror might get confused if we mess up the structure too much.
                         // But let's try.
@@ -548,62 +557,61 @@ function createTableMarkerHighlighter() {
             const builder = new RangeSetBuilder<Decoration>();
             if (pluginInstance && !pluginInstance.settings.enableTableTint) return builder.finish();
 
+            // Check if we are in Live Preview mode
+            // Source mode usually doesn't have the 'is-live-preview' class on the container
+            // We can check the parent element of the editor
+            const isLivePreview = view.dom.closest('.is-live-preview');
+            if (!isLivePreview) return builder.finish();
+
             const { state } = view;
             const doc = state.doc;
             const selection = state.selection.main;
             
             // Scan visible ranges
             for (const { from, to } of view.visibleRanges) {
-                const startLine = doc.lineAt(from);
-                const endLine = doc.lineAt(to);
+                const rangeText = doc.sliceString(from, to);
                 
-                for (let i = startLine.number; i <= endLine.number; i++) {
-                    const line = doc.line(i);
-                    const lineText = line.text;
+                // Regex: Match :r: at start of line OR after a pipe
+                // Support both standard tables (| :r:) and nested editor content (:r:)
+                // Note: In nested editor, the text IS just ":r: text", so ^ works.
+                // In main editor, it is "| :r: text".
+                
+                // We use a global regex to find all matches in the range
+                const regex = /(?:^|\|)(\s*)(:[rgbcyma]:)/g;
+                
+                let match;
+                while ((match = regex.exec(rangeText)) !== null) {
+                    // match[0] is "| :r:" or ":r:"
+                    // match[1] is whitespace
+                    // match[2] is ":r:"
                     
-                    if (!lineText.includes('|')) continue;
+                    // Calculate absolute start position
+                    // match.index is relative to 'from'
+                    const matchStartInString = match.index;
+                    const fullMatchStr = match[0];
                     
-                    // Regex: | :r: or ^:r:
-                    // Find all markers in the line
-                    const regex = /\|(\s*)(:[rgbcyma]:)/g;
-                    let match;
-                    while ((match = regex.exec(lineText)) !== null) {
-                        // match[0] is "| :r:"
-                        // match[1] is " "
-                        // match[2] is ":r:"
-                        
-                        const markerStart = line.from + match.index + 1 + (match[1] ? match[1].length : 0); // +1 for '|'
-                        const markerEnd = markerStart + (match[2] ? match[2].length : 0);
-                        
-                        const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
-                        
-                        if (isCursorInside) {
-                             // Show marker (faint, small)
-                             builder.add(markerStart, markerEnd, Decoration.mark({
-                                class: 'tinted-inline-marker tinted-cell-marker-visible' 
-                            }));
-                        } else {
-                             // Hide marker completely (collapse space)
-                             builder.add(markerStart, markerEnd, Decoration.replace({}));
-                        }
+                    // We need to find where the marker starts.
+                    // If it started with |, skip 1 char.
+                    // But we used a group (?:^|\|), so it's part of match[0].
+                    
+                    let offset = 0;
+                    if (fullMatchStr.startsWith('|')) {
+                        offset = 1; 
                     }
                     
-                    // Check start of line marker
-                    const startRegex = /^(\s*)(:[rgbcyma]:)(?=.*\|)/;
-                    const startMatch = lineText.match(startRegex);
-                    if (startMatch) {
-                        const markerStart = line.from + (startMatch[1] ? startMatch[1].length : 0);
-                        const markerEnd = markerStart + (startMatch[2] ? startMatch[2].length : 0);
-                        
-                        const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
-                        
-                        if (isCursorInside) {
-                             builder.add(markerStart, markerEnd, Decoration.mark({
-                                class: 'tinted-inline-marker tinted-cell-marker-visible'
-                            }));
-                        } else {
-                             builder.add(markerStart, markerEnd, Decoration.replace({}));
-                        }
+                    const markerStart = from + matchStartInString + offset + (match[1] ? match[1].length : 0);
+                    const markerEnd = markerStart + (match[2] ? match[2].length : 0);
+                    
+                    const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
+                    
+                    if (isCursorInside) {
+                         // Show marker (faint, small)
+                         builder.add(markerStart, markerEnd, Decoration.mark({
+                            class: 'tinted-cell-marker-visible' 
+                        }));
+                    } else {
+                         // Hide marker completely (collapse space)
+                         builder.add(markerStart, markerEnd, Decoration.replace({}));
                     }
                 }
             }
@@ -612,7 +620,6 @@ function createTableMarkerHighlighter() {
     }, { decorations: v => v.decorations });
 }
 
-// ============================================================
 // 3. Main Plugin Class
 // ============================================================
 export default class MyBlockPlugin extends Plugin {
@@ -1264,15 +1271,15 @@ export default class MyBlockPlugin extends Plugin {
                              // The regex matched textContent, but we need to find where in the DOM nodes it is.
                              // Usually it's the first text node.
                              // match[0] is the string to remove.
-                             // Note: match[0] might contain leading spaces which might span nodes? Unlikely in simple cell.
-                             // Let's just remove the marker string from the start of the text node.
-                             
-                             // We re-match on the node text to be safe
-                             const nodeText = node.textContent;
-                             const nodeMatch = nodeText.match(/^\s*:([rgbcyma]):/);
-                             if (nodeMatch) {
-                                 node.textContent = nodeText.substring(nodeMatch[0].length);
-                             }
+                    // Note: match[0] might contain leading spaces which might span nodes? Unlikely in simple cell.
+                    // Let's just remove the marker string from the start of the text node.
+                    
+                    // We re-match on the node text to be safe
+                    const nodeText = node.textContent;
+                    const nodeMatch = nodeText.match(/^\s*:([rgbcyma]):/);
+                    if (nodeMatch) {
+                        node.textContent = nodeText.substring(nodeMatch[0].length);
+                    }
                         }
                     }
                 });

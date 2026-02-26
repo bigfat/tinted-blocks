@@ -397,15 +397,22 @@
 
 /* Visible marker (when cursor inside) - Table Cell Tint */
 .tinted-cell-marker-visible {
-    /* Same opacity as inline */
-    color: rgba(0, 0, 0, 0.33) !important;
-    -webkit-text-fill-color: rgba(0, 0, 0, 0.33) !important;
+    /* Layout */
+    display: inline-block !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    transform: scale(1) !important;
     
-    /* Smaller font size */
-    font-size: 80% !important;
+    /* Appearance */
+    /* Force a faint gray color with transparency - Align with inline highlight style */
+    color: rgba(0, 0, 0, 0.35) !important;
+    -webkit-text-fill-color: rgba(0, 0, 0, 0.35) !important;
     
-    /* Ensure baseline alignment logic if needed, but font-size change might shift it */
-    /* vertical-align: middle; */
+    font-size: 0.75em !important;
+    font-weight: normal !important;
+    letter-spacing: 0.05em;
+    opacity: 1 !important; /* Color handles transparency */
 }
 
 /* Hidden marker (when cursor outside) - Table Cell Tint */
@@ -415,6 +422,7 @@
     width: 0 !important;
     height: 0 !important;
     overflow: hidden !important;
+    transform: scale(0) !important;
     
     /* Double safety: make transparent */
     color: transparent !important;

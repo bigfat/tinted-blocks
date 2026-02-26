@@ -89,3 +89,31 @@ When a user edits text inside a block, Obsidian re-renders that specific paragra
     - **Hiding**: By default, this span is styled with `display: inline-block; width: 0; overflow: hidden;`. This effectively removes it from the visual layout.
     - **Showing**: When the cursor enters the cell (detected via `window.getSelection()`), we add an active class that resets styles to `display: inline; width: auto; opacity: 0.67`, making it visible for editing.
     - **Risk**: Modifying the DOM managed by CodeMirror is generally risky (can confuse the editor). However, for specific localized changes inside a Table Widget (which is a "block" to CodeMirror), this approach proved to be the only robust way to achieve "zero-width hiding" in Live Preview.
+
+## 9. Advanced Live Preview Table Handling
+
+### The Challenge: Nested Editors & Source Mode
+- **Live Preview Architecture**: In Live Preview, tables are rendered as widgets. When a cell is focused, a *nested* CodeMirror editor (`.cm-editor`) is injected into the cell to allow editing.
+- **Problem 1: Styling Conflicts**: Our initial DOM scanner (`createTableTintPlugin`) treated the cell's content as static text. When the nested editor appeared, the scanner would try to wrap the editor's content, breaking the editor or causing input freezes/crashes due to fighting with CodeMirror's DOM management.
+- **Problem 2: Marker Styling in Active Cell**: When editing a cell, the marker `:r:` is inside the nested editor's `cm-line`. Our scanner (operating on the widget level) couldn't style this text effectively or safely.
+- **Problem 3: Source Mode**: Users expect Source Mode to show raw Markdown without any hiding or special rendering. Our logic was running indiscriminately.
+
+### The Solution: Dual-Plugin Strategy
+1. **Background Tinting (Wrapper Level)**:
+    - Use `ViewPlugin` with `requestAnimationFrame` to scan the **table widget structure** (the `td`/`th` elements) and apply background classes.
+    - **Safety**: Explicitly **ignore** any content inside a `.cm-line` to avoid touching the active editor's DOM. This prevents input freezes.
+    - **Marker Hiding**: For non-active cells, wrap the marker text in a `<span>` with `width: 0` to hide it completely from layout.
+
+2. **Active Marker Styling (Editor Level)**:
+    - Use a separate `ViewPlugin` (`createTableMarkerHighlighter`) that uses **CodeMirror Decorations** to style the marker text *inside* the active editor.
+    - **Why**: Decorations are the native way to style text in CodeMirror. This allows us to make the marker `:r:` small and faint (`opacity: 0.35`, `font-size: 0.75em`) when the user is typing it, without breaking editing behavior.
+    - **Regex**: Updated to handle both `| :r:` (start of line in source) and `:r:` (start of content in nested editor).
+
+3. **Source Mode Check**:
+    - Added a check for `.is-live-preview` class on the editor container. If absent (Source Mode), disable all table tinting logic.
+
+### Key Takeaway
+When working with complex CodeMirror widgets (like tables in Obsidian):
+- **Respect Boundaries**: Don't let DOM scanners touch the internals of nested editors.
+- **Use Native Tools**: Use CodeMirror Decorations for text inside editors, and DOM manipulation only for the container/widget structure.
+- **Mode Awareness**: Always check the view mode (Source vs Live Preview) before applying heavy visual changes.
