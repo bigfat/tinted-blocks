@@ -542,9 +542,9 @@ function createTableMarkerHighlighter() {
                         const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
                         
                         if (isCursorInside) {
-                             // Show marker (faint)
+                             // Show marker (faint, small)
                              builder.add(markerStart, markerEnd, Decoration.mark({
-                                class: 'tinted-inline-marker tinted-inline-visible' 
+                                class: 'tinted-inline-marker tinted-cell-marker-visible' 
                             }));
                         } else {
                              // Hide marker completely (collapse space)
@@ -563,7 +563,7 @@ function createTableMarkerHighlighter() {
                         
                         if (isCursorInside) {
                              builder.add(markerStart, markerEnd, Decoration.mark({
-                                class: 'tinted-inline-marker tinted-inline-visible'
+                                class: 'tinted-inline-marker tinted-cell-marker-visible'
                             }));
                         } else {
                              builder.add(markerStart, markerEnd, Decoration.replace({}));
