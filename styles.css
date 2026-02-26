@@ -337,7 +337,109 @@
     background-color: rgba(255, 255, 60, 0.25) !important;
 }
 
+/* Cyan */
+.tinted-inline-cyan {
+    background-color: rgba(0, 255, 255, 0.2) !important; /* Transparent Cyan */
+}
+.theme-dark .tinted-inline-cyan {
+    background-color: rgba(60, 255, 255, 0.25) !important;
+}
+
+/* Magenta */
+.tinted-inline-magenta {
+    background-color: rgba(255, 0, 255, 0.2) !important; /* Transparent Magenta */
+}
+.theme-dark .tinted-inline-magenta {
+    background-color: rgba(255, 60, 255, 0.25) !important;
+}
+
+/* Gray/Auto (Ash) */
+.tinted-inline-gray {
+    background-color: rgba(128, 128, 128, 0.2) !important; /* Transparent Gray */
+}
+.theme-dark .tinted-inline-gray {
+    background-color: rgba(160, 160, 160, 0.25) !important;
+}
+
+/* =========================================
+   Table Cell Tinting
+   ========================================= */
+/* Cell colors - Matching inline colors */
+/* Use !important to override theme striping or hover effects if desired, 
+   but usually we just want to set background. */
+
+.tinted-cell-red { background-color: rgba(255, 0, 0, 0.2) !important; }
+.theme-dark .tinted-cell-red { background-color: rgba(255, 60, 60, 0.25) !important; }
+
+.tinted-cell-green { background-color: rgba(0, 255, 0, 0.2) !important; }
+.theme-dark .tinted-cell-green { background-color: rgba(60, 255, 60, 0.25) !important; }
+
+.tinted-cell-blue { background-color: rgba(0, 100, 255, 0.2) !important; }
+.theme-dark .tinted-cell-blue { background-color: rgba(60, 160, 255, 0.25) !important; }
+
+.tinted-cell-yellow { background-color: rgba(255, 255, 0, 0.25) !important; }
+.theme-dark .tinted-cell-yellow { background-color: rgba(255, 255, 60, 0.25) !important; }
+
+.tinted-cell-cyan { background-color: rgba(0, 255, 255, 0.2) !important; }
+.theme-dark .tinted-cell-cyan { background-color: rgba(60, 255, 255, 0.25) !important; }
+
+.tinted-cell-magenta { background-color: rgba(255, 0, 255, 0.2) !important; }
+.theme-dark .tinted-cell-magenta { background-color: rgba(255, 60, 255, 0.25) !important; }
+
+.tinted-cell-gray { background-color: rgba(128, 128, 128, 0.2) !important; }
+.theme-dark .tinted-cell-gray { background-color: rgba(160, 160, 160, 0.25) !important; }
+
+/* 
+   DOM Wrapped Table Markers 
+   (Used when we wrap :r: in a span)
+*/
+.tinted-cell-marker-wrapper {
+    /* Default: Hidden and no space */
+    display: inline-block;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    font-size: 0;
+    opacity: 0;
+    pointer-events: none; /* Ignore clicks */
+}
+
+/* Active State: Visible and styled */
+.tinted-cell-marker-active {
+    /* Reveal */
+    display: inline;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    pointer-events: auto;
+    
+    /* Styled */
+    font-size: 80% !important;
+    opacity: 0.67 !important;
+    color: inherit !important; /* Inherit base text color, opacity handles faintness */
+    
+    /* Ensure no weird margins */
+    margin: 0;
+    padding: 0;
+}
+
+
 /* Visible marker (when cursor inside) - No opacity on background! */
 .tinted-inline-visible {
-    /* opacity: 0.67 !important; REMOVED to keep background consistent */
+    /* Make text lighter/fainter (67% opacity / 33% visible) */
+    /* We override the default tinted-inline-marker color here */
+    color: rgba(0, 0, 0, 0.33) !important;
+    -webkit-text-fill-color: rgba(0, 0, 0, 0.33) !important;
+}
+
+/* Dark mode adjustment */
+@media (prefers-color-scheme: dark) {
+    .tinted-inline-visible {
+        color: rgba(255, 255, 255, 0.33) !important;
+        -webkit-text-fill-color: rgba(255, 255, 255, 0.33) !important;
+    }
+}
+.theme-dark .tinted-inline-visible {
+    color: rgba(255, 255, 255, 0.33) !important;
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.33) !important;
 }

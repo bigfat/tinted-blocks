@@ -215,131 +215,429 @@ const blockHighlighter = StateField.define<DecorationSet>({
     provide: field => EditorView.decorations.from(field)
 });
 
+    // ============================================================
+    // 2. 行内高亮 (Inline)
+    // ============================================================
+
+    // Helper to create the ViewPlugin with current settings
+    function createInlineHighlighter() {
+        return ViewPlugin.fromClass(class {
+            decorations: DecorationSet;
+            
+            constructor(view: EditorView) {
+                this.decorations = this.buildDecorations(view);
+            }
+
+            update(update: ViewUpdate) {
+                if (update.docChanged || update.viewportChanged || update.selectionSet) {
+                    this.decorations = this.buildDecorations(update.view);
+                }
+            }
+
+            buildDecorations(view: EditorView): DecorationSet {
+                const builder = new RangeSetBuilder<Decoration>();
+                if (pluginInstance && !pluginInstance.settings.enableInlineHighlight) return builder.finish();
+
+                const { state } = view;
+                const doc = state.doc;
+                const selection = state.selection.main;
+                
+                // Marker configuration
+                const marker = pluginInstance ? pluginInstance.settings.inlineMarker : '::';
+                const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                
+                // Regex: ::(?:([rgbycm]):)?(.*?)::
+                // Matches: ::r:text:: or ::text::
+                // Group 1: color code (r,g,b,y,c,m) or undefined
+                // Group 2: content
+                const regex = new RegExp(`${escapedMarker}(?:([rgbycm]):)?(.*?)${escapedMarker}`, 'g');
+                
+                // Iterate over visible ranges for performance
+                for (const { from, to } of view.visibleRanges) {
+                    const rangeText = doc.sliceString(from, to);
+                    let match;
+                    
+                    while ((match = regex.exec(rangeText)) !== null) {
+                        const matchStart = from + match.index;
+                        const fullMatch = match[0];
+                        const matchEnd = matchStart + fullMatch.length;
+
+                        // Check if inside code block/inline code
+                        const tree = syntaxTree(state);
+                        // Resolve at start + 1 to be safely inside the match (in case match starts at boundary)
+                        const node = tree.resolveInner(matchStart + 1, -1);
+                        const nodeName = node.type.name;
+                        if (nodeName.includes("code") || nodeName.includes("Code") || nodeName.includes("math")) {
+                            continue;
+                        }
+                        
+                        const colorCode = match[1]; // r, g, b, y, c, m or undefined
+                        const content = match[2] || "";
+                        
+                        // Determine Color Class
+                        let colorClass = 'tinted-inline-yellow'; // default
+                        if (colorCode === 'r') colorClass = 'tinted-inline-red';
+                        if (colorCode === 'g') colorClass = 'tinted-inline-green';
+                        if (colorCode === 'b') colorClass = 'tinted-inline-blue';
+                        if (colorCode === 'y') colorClass = 'tinted-inline-yellow';
+                        if (colorCode === 'c') colorClass = 'tinted-inline-cyan';
+                        if (colorCode === 'm') colorClass = 'tinted-inline-magenta';
+                        
+                        // Check cursor position
+                        const isCursorInside = selection.head >= matchStart && selection.head <= matchEnd;
+                        
+                        // Calculate sub-ranges
+                        const endMarkerLen = marker.length;
+                        const contentLen = content.length;
+                        // Calculate start marker length: Full length - Content length - End marker length
+                        // Example: ::r:text:: (10 chars) - text (4 chars) - :: (2 chars) = 4 chars (::r:)
+                        const startMarkerLen = fullMatch.length - contentLen - endMarkerLen;
+                        
+                        const startMarkerFrom = matchStart;
+                        const startMarkerTo = matchStart + startMarkerLen;
+                        
+                        const contentFrom = startMarkerTo;
+                        const contentTo = contentFrom + contentLen;
+                        
+                        const endMarkerFrom = contentTo;
+                        const endMarkerTo = matchEnd;
+                        
+                        // Add Decorations
+                        
+                        if (isCursorInside) {
+                            // 1. Start Marker (Visible but faint)
+                            builder.add(startMarkerFrom, startMarkerTo, Decoration.mark({ 
+                                class: `tinted-inline-marker tinted-inline-visible tinted-inline-start ${colorClass}` 
+                            }));
+                            
+                            // 2. Content (Normal + Background)
+                            builder.add(contentFrom, contentTo, Decoration.mark({ 
+                                class: `tinted-inline-content ${colorClass}` 
+                            }));
+                            
+                            // 3. End Marker (Visible but faint)
+                            builder.add(endMarkerFrom, endMarkerTo, Decoration.mark({ 
+                                class: `tinted-inline-marker tinted-inline-visible tinted-inline-end ${colorClass}` 
+                            }));
+                            
+                        } else {
+                            // Cursor outside: Hide markers, show content
+                            // Use Decoration.replace({}) to collapse space of markers
+                            builder.add(startMarkerFrom, startMarkerTo, Decoration.replace({})); 
+                            builder.add(contentFrom, contentTo, Decoration.mark({ class: `tinted-inline ${colorClass}` }));
+                            builder.add(endMarkerFrom, endMarkerTo, Decoration.replace({}));
+                        }
+                    }
+                }
+                return builder.finish();
+            }
+        }, { decorations: v => v.decorations });
+    }
+
+
+
 // ============================================================
-// 2. 行内高亮 (Inline)
+// 4. 编辑模式 (Live Preview) - Table Cell Tinting
 // ============================================================
 
-// Helper to create the ViewPlugin with current settings
-function createInlineHighlighter() {
+// We need a ViewPlugin to handle table cell highlighting in Editing View
+// Because tables in Editing View are rendered as complex structures.
+// However, CodeMirror decorations (Decoration.mark/line) work on the text ranges.
+// But we want to style the CELL (TD/TH background).
+// In Live Preview, tables are rendered inside a specific block or widget?
+// Actually, in Live Preview, tables are still Markdown text lines mostly, unless "Live Preview" renders them as HTML tables.
+// If "Live Preview" renders them as HTML tables, they are likely inside a WidgetDecoration or BlockDecoration.
+// We can't easily inject styles INTO an existing table widget from another plugin (Obsidian's internal one).
+
+// BUT, we can use a Decoration.line() with attributes to style the LINE, but that's for the whole row?
+// No, tables in Live Preview are indeed fully rendered HTML tables (interactive).
+// They are usually replaced widgets.
+// We can try to attach a mutation observer to the editor DOM to catch tables and style them?
+// Or use a ViewPlugin that scans the visible DOM elements?
+
+// Let's use the same approach as `processTableTinting` (PostProcessor) but applied to the EditorView's DOM.
+// But EditorView updates frequently.
+// A ViewPlugin that responds to updates and scans the *contentDOM* of the editor view.
+
+function createTableTintPlugin() {
+    return ViewPlugin.fromClass(class {
+        observer: MutationObserver | null = null;
+        
+        constructor(view: EditorView) {
+            this.setupObserver(view);
+            // Initial scan
+            requestAnimationFrame(() => this.processTables(view.contentDOM));
+        }
+
+        update(view: ViewUpdate) {
+            // Re-setup observer if view changed significantly?
+            // Usually contentDOM stays same instance but let's be safe
+            // If doc changed, process immediately (debounced via observer usually, but here we can force)
+            if (view.docChanged || view.viewportChanged) {
+                 requestAnimationFrame(() => this.processTables(view.view.contentDOM));
+            }
+        }
+        
+        destroy() {
+            if (this.observer) this.observer.disconnect();
+        }
+        
+        setupObserver(view: EditorView) {
+            if (this.observer) this.observer.disconnect();
+            
+            this.observer = new MutationObserver((mutations) => {
+                let needsUpdate = false;
+                for (const mutation of mutations) {
+                    // Check if mutation is related to tables
+                    if (mutation.target instanceof HTMLElement && mutation.target.closest('table')) {
+                        needsUpdate = true;
+                        break;
+                    }
+                    if (mutation.type === 'characterData' && mutation.target.parentElement?.closest('table')) {
+                        needsUpdate = true;
+                        break;
+                    }
+                }
+                
+                if (needsUpdate) {
+                    this.processTables(view.contentDOM);
+                }
+            });
+            
+            // Observe subtree for character changes (text typing) and childList (structure)
+            this.observer.observe(view.contentDOM, { 
+                childList: true, 
+                subtree: true, 
+                characterData: true 
+            });
+        }
+        
+        processTables(element: HTMLElement) {
+             if (!pluginInstance || !pluginInstance.settings.enableTableTint) return;
+
+             const selection = window.getSelection();
+             let activeCell: HTMLElement | null = null;
+             
+             if (selection && selection.anchorNode) {
+                 const cell = selection.anchorNode.parentElement?.closest('td, th');
+                 if (cell) {
+                     activeCell = cell as HTMLElement;
+                 }
+             }
+
+             const tables = element.querySelectorAll('table');
+             tables.forEach(table => {
+                 const rows = table.querySelectorAll('tr');
+                 rows.forEach(row => {
+                     const cells = row.querySelectorAll('td, th');
+                     cells.forEach(cell => {
+                         const text = cell.textContent || "";
+                         const match = text.match(/^(\s*)(:[rgbcyma]:)/);
+                         
+                         // Clean up old wrapped markers if any (from previous logic or if text changed)
+                         // Actually, if we use DOM replacement, we need to handle "unwrapping" if user edits?
+                         // But we are in a MutationObserver loop.
+                         
+                         // Check if we already have a wrapped marker
+                         const existingWrapper = cell.querySelector('.tinted-cell-marker-wrapper');
+                         
+                         if (match && match[2]) {
+                             const colorCode = match[2].charAt(1); // :r: -> r
+                             
+                             let colorClass = 'tinted-cell-gray';
+                             if (colorCode === 'r') colorClass = 'tinted-cell-red';
+                             if (colorCode === 'g') colorClass = 'tinted-cell-green';
+                             if (colorCode === 'b') colorClass = 'tinted-cell-blue';
+                             if (colorCode === 'y') colorClass = 'tinted-cell-yellow';
+                             if (colorCode === 'c') colorClass = 'tinted-cell-cyan';
+                             if (colorCode === 'm') colorClass = 'tinted-cell-magenta';
+                             if (colorCode === 'a') colorClass = 'tinted-cell-gray';
+                             
+                             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
+                                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
+                             classes.forEach(c => cell.classList.remove(c));
+                             cell.classList.add(colorClass);
+                             
+                             // DOM Wrapping Logic
+                             // We want to wrap the match[0] (whitespace + marker) or just marker?
+                             // match[1] is whitespace, match[2] is marker.
+                             // We wrap match[2].
+                             
+                             const isActive = (cell === activeCell);
+                             
+                             if (!existingWrapper) {
+                                 // Need to wrap.
+                                 // Find text node.
+                                 const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null);
+                                 let node = walker.nextNode();
+                                 if (node && node.textContent) {
+                                     const nodeText = node.textContent;
+                                     const nodeMatch = nodeText.match(/^(\s*)(:[rgbcyma]:)/);
+                                     if (nodeMatch && nodeMatch[2]) {
+                                         // Found it.
+                                         // Split node: [whitespace] [marker] [rest]
+                                         const whitespace = nodeMatch[1];
+                                         const marker = nodeMatch[2];
+                                         const rest = nodeText.substring(nodeMatch[0].length);
+                                         
+                                         const fragment = document.createDocumentFragment();
+                                         if (whitespace) fragment.appendChild(document.createTextNode(whitespace));
+                                         
+                                         const span = document.createElement('span');
+                                         span.className = 'tinted-cell-marker-wrapper';
+                                         span.textContent = marker;
+                                         // Apply initial state
+                                         if (isActive) span.classList.add('tinted-cell-marker-active');
+                                         
+                                         fragment.appendChild(span);
+                                         if (rest) fragment.appendChild(document.createTextNode(rest));
+                                         
+                                         // Replace
+                                         if (node.parentNode) {
+                                             node.parentNode.replaceChild(fragment, node);
+                                             
+                                             // Restore cursor?
+                                             // If we just modified DOM while typing, cursor might be lost.
+                                             // But MutationObserver runs async.
+                                             // If cursor was in `node`, we need to put it back.
+                                             // This is the risky part.
+                                             // But for "Hidden when not active", usually we are not typing IN the marker.
+                                             // If we are typing, we are active.
+                                             // If we are active, we show the marker.
+                                         }
+                                     }
+                                 }
+                             } else {
+                                 // Already wrapped. Update active state.
+                                 if (isActive) {
+                                     if (!existingWrapper.classList.contains('tinted-cell-marker-active')) {
+                                         existingWrapper.classList.add('tinted-cell-marker-active');
+                                     }
+                                 } else {
+                                     if (existingWrapper.classList.contains('tinted-cell-marker-active')) {
+                                         existingWrapper.classList.remove('tinted-cell-marker-active');
+                                     }
+                                 }
+                                 
+                                 // Also verify content is still correct (user might have edited inside span)
+                                 // If text inside span no longer matches marker syntax, unwrap it?
+                                 // But Obsidian might handle contenteditable inside span weirdly.
+                                 // Let's rely on Obsidian to manage text changes. 
+                                 // If user deletes char in span, MutationObserver fires.
+                                 // We re-scan.
+                                 // If text doesn't match `^...`, we go to `else` block below.
+                             }
+                             
+                             if (isActive) {
+                                 cell.classList.add('tinted-cell-active');
+                             } else {
+                                 cell.classList.remove('tinted-cell-active');
+                             }
+                             
+                         } else {
+                             // No match found in text (or text is inside wrapper already?)
+                             // If we wrapped it, `text` (textContent) still contains the marker!
+                             // So match SHOULD succeed even if wrapped.
+                             
+                             // If match failed, it means marker is gone or invalid.
+                             // Remove classes.
+                             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
+                                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
+                             classes.forEach(c => cell.classList.remove(c));
+                             cell.classList.remove('tinted-cell-active');
+                             
+                             // Unwrap if exists (cleanup)
+                             if (existingWrapper) {
+                                 const parent = existingWrapper.parentNode;
+                                 if (parent) {
+                                     while (existingWrapper.firstChild) {
+                                         parent.insertBefore(existingWrapper.firstChild, existingWrapper);
+                                     }
+                                     parent.removeChild(existingWrapper);
+                                     // Merge text nodes? normalize()
+                                     parent.normalize();
+                                 }
+                             }
+                         }
+                     });
+                 });
+             });
+        }
+    });
+}
+
+// We also need a decorator to style the marker text itself (faint/transparent) in Editing View
+function createTableMarkerHighlighter() {
     return ViewPlugin.fromClass(class {
         decorations: DecorationSet;
-        
         constructor(view: EditorView) {
             this.decorations = this.buildDecorations(view);
         }
-
         update(update: ViewUpdate) {
             if (update.docChanged || update.viewportChanged || update.selectionSet) {
                 this.decorations = this.buildDecorations(update.view);
             }
         }
-
         buildDecorations(view: EditorView): DecorationSet {
             const builder = new RangeSetBuilder<Decoration>();
-            if (pluginInstance && !pluginInstance.settings.enableInlineHighlight) return builder.finish();
+            if (pluginInstance && !pluginInstance.settings.enableTableTint) return builder.finish();
 
             const { state } = view;
             const doc = state.doc;
             const selection = state.selection.main;
             
-            // Marker configuration
-            const marker = pluginInstance ? pluginInstance.settings.inlineMarker : '::';
-            const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            
-            // Regex: ::(?:([rgby]):)?(.*?)::
-            // Matches: ::r:text:: or ::text::
-            // Group 1: color code (r,g,b,y) or undefined
-            // Group 2: content
-            const regex = new RegExp(`${escapedMarker}(?:([rgby]):)?(.*?)${escapedMarker}`, 'g');
-            
-            // Iterate over visible ranges for performance
+            // Scan visible ranges
             for (const { from, to } of view.visibleRanges) {
-                const rangeText = doc.sliceString(from, to);
-                let match;
+                const startLine = doc.lineAt(from);
+                const endLine = doc.lineAt(to);
                 
-                while ((match = regex.exec(rangeText)) !== null) {
-                    const matchStart = from + match.index;
-                    const fullMatch = match[0];
-                    const matchEnd = matchStart + fullMatch.length;
-
-                    // Check if inside code block/inline code
-                    const tree = syntaxTree(state);
-                    // Resolve at start + 1 to be safely inside the match (in case match starts at boundary)
-                    // But if match is `::...` inside `...` it should be fine.
-                    // Resolving at matchStart is usually enough if the node covers it.
-                    // But for inline code `...` the backtick is separate node usually.
-                    // Let's check the middle of the match to be safe?
-                    // Or check start.
-                    const node = tree.resolveInner(matchStart + 1, -1);
-                    const nodeName = node.type.name;
-                    if (nodeName.includes("code") || nodeName.includes("Code") || nodeName.includes("math")) {
-                        continue;
+                for (let i = startLine.number; i <= endLine.number; i++) {
+                    const line = doc.line(i);
+                    const lineText = line.text;
+                    
+                    if (!lineText.includes('|')) continue;
+                    
+                    // Regex: | :r: or ^:r:
+                    // Find all markers in the line
+                    const regex = /\|(\s*)(:[rgbcyma]:)/g;
+                    let match;
+                    while ((match = regex.exec(lineText)) !== null) {
+                        // match[0] is "| :r:"
+                        // match[1] is " "
+                        // match[2] is ":r:"
+                        
+                        const markerStart = line.from + match.index + 1 + (match[1] ? match[1].length : 0); // +1 for '|'
+                        const markerEnd = markerStart + (match[2] ? match[2].length : 0);
+                        
+                        const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
+                        
+                        if (isCursorInside) {
+                             // Show marker (faint)
+                             builder.add(markerStart, markerEnd, Decoration.mark({
+                                class: 'tinted-inline-marker tinted-inline-visible' 
+                            }));
+                        } else {
+                             // Hide marker completely (collapse space)
+                             builder.add(markerStart, markerEnd, Decoration.replace({}));
+                        }
                     }
                     
-                    const colorCode = match[1]; // r, g, b, y or undefined
-                    const content = match[2] || "";
-                    
-                    // Determine Color Class
-                    let colorClass = 'tinted-inline-yellow'; // default
-                    if (colorCode === 'r') colorClass = 'tinted-inline-red';
-                    if (colorCode === 'g') colorClass = 'tinted-inline-green';
-                    if (colorCode === 'b') colorClass = 'tinted-inline-blue';
-                    if (colorCode === 'y') colorClass = 'tinted-inline-yellow';
-                    
-                    // Check cursor position
-                    const isCursorInside = selection.head >= matchStart && selection.head <= matchEnd;
-                    
-                    // Calculate sub-ranges
-                    // Start Marker: from matchStart to matchStart + (fullLen - contentLen - endMarkerLen)
-                    // End Marker: from matchEnd - endMarkerLen to matchEnd
-                    
-                    const endMarkerLen = marker.length;
-                    const contentLen = content.length;
-                    const startMarkerLen = fullMatch.length - contentLen - endMarkerLen;
-                    
-                    const startMarkerFrom = matchStart;
-                    const startMarkerTo = matchStart + startMarkerLen;
-                    
-                    const contentFrom = startMarkerTo;
-                    const contentTo = contentFrom + contentLen;
-                    
-                    const endMarkerFrom = contentTo;
-                    const endMarkerTo = matchEnd;
-                    
-                    // Add Decorations
-                    
-                    // Unified Block approach:
-                    // Instead of separate marks, we mark the WHOLE range with the background color.
-                    // And we apply specific classes to the start/end parts to style the text (faint).
-                    
-                    if (isCursorInside) {
-                        // Whole range gets the background color + rounded corners
-                        // But wait, if we use one mark for the whole range, we can't easily style the text of just the markers differently 
-                        // unless we use span wrapping logic which CodeMirror decorations do well.
+                    // Check start of line marker
+                    const startRegex = /^(\s*)(:[rgbcyma]:)(?=.*\|)/;
+                    const startMatch = lineText.match(startRegex);
+                    if (startMatch) {
+                        const markerStart = line.from + (startMatch[1] ? startMatch[1].length : 0);
+                        const markerEnd = markerStart + (startMatch[2] ? startMatch[2].length : 0);
                         
-                        // Actually, we can stack decorations or use multiple classes.
-                        // Let's stick to separate ranges but ensure they have matching classes that join them visually.
+                        const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
                         
-                        // 1. Start Marker
-                        builder.add(startMarkerFrom, startMarkerTo, Decoration.mark({ 
-                            class: `tinted-inline-marker tinted-inline-start ${colorClass}` 
-                        }));
-                        
-                        // 2. Content
-                        builder.add(contentFrom, contentTo, Decoration.mark({ 
-                            class: `tinted-inline-content ${colorClass}` 
-                        }));
-                        
-                        // 3. End Marker
-                        builder.add(endMarkerFrom, endMarkerTo, Decoration.mark({ 
-                            class: `tinted-inline-marker tinted-inline-end ${colorClass}` 
-                        }));
-                        
-                    } else {
-                        // Cursor outside: Hide markers, show content
-                        builder.add(startMarkerFrom, startMarkerTo, Decoration.replace({})); 
-                        builder.add(contentFrom, contentTo, Decoration.mark({ class: `tinted-inline ${colorClass}` }));
-                        builder.add(endMarkerFrom, endMarkerTo, Decoration.replace({}));
+                        if (isCursorInside) {
+                             builder.add(markerStart, markerEnd, Decoration.mark({
+                                class: 'tinted-inline-marker tinted-inline-visible'
+                            }));
+                        } else {
+                             builder.add(markerStart, markerEnd, Decoration.replace({}));
+                        }
                     }
                 }
             }
@@ -347,7 +645,6 @@ function createInlineHighlighter() {
         }
     }, { decorations: v => v.decorations });
 }
-
 
 // ============================================================
 // 3. Main Plugin Class
@@ -362,7 +659,7 @@ export default class MyBlockPlugin extends Plugin {
 
         // Register extensions
         this.inlinePlugin = createInlineHighlighter();
-        this.registerEditorExtension([blockHighlighter, this.inlinePlugin]);
+        this.registerEditorExtension([blockHighlighter, this.inlinePlugin, createTableTintPlugin(), createTableMarkerHighlighter()]);
 
         // Register Markdown Post Processor (Reading View)
         this.registerMarkdownPostProcessor((element, context) => {
@@ -391,6 +688,14 @@ export default class MyBlockPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'toggle-cell-tint',
+            name: 'Tint table cell',
+            editorCallback: (editor: Editor, view: MarkdownView) => {
+                this.toggleCellTint(editor);
+            }
+        });
+
         // Add Context Menu Item
         this.registerEvent(
             this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
@@ -413,6 +718,15 @@ export default class MyBlockPlugin extends Plugin {
                         .setIcon('highlighter')
                         .onClick(() => {
                             this.toggleInlineHighlight(editor);
+                        });
+                });
+
+                menu.addItem((item) => {
+                    item
+                        .setTitle('Tint table cell')
+                        .setIcon('table')
+                        .onClick(() => {
+                            this.toggleCellTint(editor);
                         });
                 });
             })
@@ -526,7 +840,7 @@ export default class MyBlockPlugin extends Plugin {
         
         // Regex to check if already wrapped (supports optional color code)
         // Matches ::r:text:: or ::text::
-        const fullRegex = new RegExp(`^${escapedMarker}(?:[rgby]:)?(.*)${escapedMarker}$`);
+        const fullRegex = new RegExp(`^${escapedMarker}(?:[rgbycm]:)?(.*)${escapedMarker}$`);
         
         if (selection.match(fullRegex)) {
              // Unwrap
@@ -540,6 +854,60 @@ export default class MyBlockPlugin extends Plugin {
             // Wrap
             // Use default (yellow) -> ::text::
             editor.replaceSelection(`${marker}${selection}${marker}`);
+        }
+    }
+
+    toggleCellTint(editor: Editor) {
+        // Find if cursor is inside a table cell (pipe delimited line)
+        // Simple heuristic: Line contains '|'
+        const cursor = editor.getCursor();
+        const lineText = editor.getLine(cursor.line);
+        
+        // Check if line looks like a table row
+        if (!lineText.includes('|')) return;
+        
+        // We need to find which cell we are in.
+        // Split by pipes, but be careful of escaped pipes (\|) - simple split for now
+        // Or just find the cell boundaries around the cursor.
+        
+        // Simple approach: Search backwards for '|' or start of line, search forwards for '|' or end of line.
+        
+        let start = cursor.ch;
+        while (start > 0) {
+            const char = lineText.charAt(start - 1);
+            if (char === '|') break; // Found start of cell
+            start--;
+        }
+        
+        let end = cursor.ch;
+        while (end < lineText.length) {
+            const char = lineText.charAt(end);
+            if (char === '|') break; // Found end of cell
+            end++;
+        }
+        
+        // Extract cell content
+        const cellContent = lineText.substring(start, end);
+        // Check if it already has a marker
+        // Regex: ^\s*:([rgbcyma]):
+        const match = cellContent.match(/^(\s*)(:[rgbcyma]:)/);
+        
+        if (match && match[1] !== undefined && match[2] !== undefined) {
+            // Remove marker
+            // match[1] is whitespace, match[2] is marker
+            const markerLen = match[2].length;
+            const whitespaceLen = match[1].length;
+            
+            // We want to remove the marker match[2].
+            // The marker starts at `start + whitespaceLen`
+            
+            const from = { line: cursor.line, ch: start + whitespaceLen };
+            const to = { line: cursor.line, ch: start + whitespaceLen + markerLen };
+            editor.replaceRange('', from, to);
+            
+        } else {
+            // Add marker (Default: :c:)
+            editor.replaceRange(':c: ', { line: cursor.line, ch: start });
         }
     }
 
@@ -807,8 +1175,17 @@ export default class MyBlockPlugin extends Plugin {
         }
 
         // 2. Block Highlight (Reading View)
-        if (!this.settings.enableBlockHighlight) return;
+        if (this.settings.enableBlockHighlight) {
+            this.processBlockHighlight(element);
+        }
         
+        // 3. Table Cell Tinting (Reading View)
+        if (this.settings.enableTableTint) {
+            this.processTableTinting(element);
+        }
+    }
+    
+    processBlockHighlight(element: HTMLElement) {
         // Mark elements and queue wrapping
         
         const startMarker = this.settings.blockStartMarker;
@@ -874,6 +1251,67 @@ export default class MyBlockPlugin extends Plugin {
             // The MutationObserver will detect the text change and trigger a re-scan of the parent.
             // So we don't need to manually queue here either.
         }
+    }
+
+    processTableTinting(element: HTMLElement) {
+        // Find all tables in the element
+        const tables = element.querySelectorAll('table');
+        tables.forEach(table => {
+            // Check if we already processed this table? 
+            // PostProcessor is called on sections, so usually fresh.
+            
+            const rows = table.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td, th');
+                cells.forEach(cell => {
+                    const text = cell.textContent || "";
+                    // Regex: Look for :([rgbcyma]): at the START of the cell content.
+                    // Allows optional spaces before it.
+                    // colors: r,g,b,c,y,m, a(auto/gray)
+                    // Matches: :r: Text or :r:Text
+                    const match = text.match(/^\s*:([rgbcyma]):/);
+                    
+                    if (match) {
+                        const colorCode = match[1];
+                        const fullMarker = match[0]; // e.g. " :r:"
+                        
+                        // Determine class
+                        let colorClass = 'tinted-cell-gray'; // default/auto
+                        if (colorCode === 'r') colorClass = 'tinted-cell-red';
+                        if (colorCode === 'g') colorClass = 'tinted-cell-green';
+                        if (colorCode === 'b') colorClass = 'tinted-cell-blue';
+                        if (colorCode === 'y') colorClass = 'tinted-cell-yellow';
+                        if (colorCode === 'c') colorClass = 'tinted-cell-cyan';
+                        if (colorCode === 'm') colorClass = 'tinted-cell-magenta';
+                        if (colorCode === 'a') colorClass = 'tinted-cell-gray';
+
+                        // Apply class to cell (TD/TH)
+                        cell.addClass(colorClass);
+                        
+                        // Remove the marker from the text content
+                        // We need to be careful to only remove the marker text node, not children if any (though usually text is first)
+                        // Using TreeWalker to find the text node containing the marker
+                        
+                        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null);
+                        const node = walker.nextNode();
+                        if (node && node.textContent) {
+                             // The regex matched textContent, but we need to find where in the DOM nodes it is.
+                             // Usually it's the first text node.
+                             // match[0] is the string to remove.
+                             // Note: match[0] might contain leading spaces which might span nodes? Unlikely in simple cell.
+                             // Let's just remove the marker string from the start of the text node.
+                             
+                             // We re-match on the node text to be safe
+                             const nodeText = node.textContent;
+                             const nodeMatch = nodeText.match(/^\s*:([rgbcyma]):/);
+                             if (nodeMatch) {
+                                 node.textContent = nodeText.substring(nodeMatch[0].length);
+                             }
+                        }
+                    }
+                });
+            });
+        });
     }
 
     onunload() {
@@ -1030,8 +1468,8 @@ export default class MyBlockPlugin extends Plugin {
     processInlineHighlight(element: HTMLElement) {
         const marker = this.settings.inlineMarker; // "::"
         const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Regex: ::(?:([rgby]):)?(.*?)::
-        const regex = new RegExp(`${escapedMarker}(?:([rgby]):)?(.*?)${escapedMarker}`, 'g');
+        // Regex: ::(?:([rgbycm]):)?(.*?)::
+        const regex = new RegExp(`${escapedMarker}(?:([rgbycm]):)?(.*?)${escapedMarker}`, 'g');
 
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
         let node;
@@ -1084,6 +1522,8 @@ export default class MyBlockPlugin extends Plugin {
                  if (colorCode === 'g') colorClass = 'tinted-inline-green';
                  if (colorCode === 'b') colorClass = 'tinted-inline-blue';
                  if (colorCode === 'y') colorClass = 'tinted-inline-yellow';
+                 if (colorCode === 'c') colorClass = 'tinted-inline-cyan';
+                 if (colorCode === 'm') colorClass = 'tinted-inline-magenta';
                  
                  const span = document.createElement('span');
                  span.className = `tinted-inline ${colorClass}`;

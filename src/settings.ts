@@ -9,16 +9,20 @@ export interface MyPluginSettings {
 	
 	enableInlineHighlight: boolean;
 	inlineMarker: string;
+
+    enableTableTint: boolean;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	enableBlockHighlight: true,
-	blockStartMarker: '::>',
-	blockEndMarker: '<::',
+	blockStartMarker: '/--',
+	blockEndMarker: '--/',
 	defaultColor: '#555555',
 	
 	enableInlineHighlight: true,
 	inlineMarker: '::',
+
+    enableTableTint: true,
 }
 
 export class TintedBlocksSettingTab extends PluginSettingTab {
@@ -98,7 +102,7 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
 			.addText(text => {
                 startMarkerText = text;
                 text
-				.setPlaceholder('::>')
+				.setPlaceholder('/--')
 				.setValue(this.plugin.settings.blockStartMarker)
 				.onChange(async (value) => {
                     // Reset to default if empty
@@ -133,7 +137,7 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
 			.addText(text => {
                 endMarkerText = text;
                 text
-				.setPlaceholder('<::')
+				.setPlaceholder('--/')
 				.setValue(this.plugin.settings.blockEndMarker)
 				.onChange(async (value) => {
 					this.plugin.settings.blockEndMarker = value;
@@ -255,6 +259,19 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.inlineMarker)
 				.onChange(async (value) => {
 					this.plugin.settings.inlineMarker = value;
+					await this.plugin.saveSettings();
+				}));
+
+        // --- Table Cell Tinting Section ---
+		containerEl.createEl('h3', {text: 'Table Cell Tinting'});
+
+		new Setting(containerEl)
+			.setName('Enable Table Cell Tinting')
+			.setDesc('Toggle the table cell tinting feature (syntax: | :c: content |).')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableTableTint)
+				.onChange(async (value) => {
+					this.plugin.settings.enableTableTint = value;
 					await this.plugin.saveSettings();
 				}));
 	}

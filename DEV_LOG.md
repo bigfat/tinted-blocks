@@ -78,3 +78,14 @@ When a user edits text inside a block, Obsidian re-renders that specific paragra
     - **Reconnect after**: We use a `finally` block to ensure `observer.observe()` is called again after all changes are complete.
     - **Robust Defaults**: Added strict checks in `loadSettings` to prevent `undefined` or invalid marker settings (which could cause Regex to match empty strings, leading to other infinite loops).
 - **Lesson**: When a plugin observes the DOM and also modifies it, it **MUST** stop observing during its own modifications to avoid infinite recursion.
+
+## 8. Live Preview Table Cell Tinting & Marker Hiding
+- **Goal**: Implement "Tinted Cells" in Editing/Live Preview mode, where markers (like `:r:`) are hidden when not editing, but visible when editing, without occupying layout space when hidden.
+- **Challenge 1: CodeMirror Decorations vs Table Widgets**: Obsidian renders tables in Live Preview as opaque widgets. CodeMirror's `Decoration.replace({})` (which is perfect for hiding text) often fails to penetrate or reconcile correctly within these complex widgets, leading to markers remaining visible or layout breaking.
+- **Challenge 2: CSS Custom Highlight API**: We attempted to use the modern `CSS.highlights` API. While it can make text transparent (`color: transparent`), it **cannot** collapse the space (`font-size: 0` is not reliably supported for layout suppression in the Highlight API spec). This resulted in "invisible but space-occupying" markers.
+- **Successful Solution: DOM Manipulation with MutationObserver**:
+    - We used a `MutationObserver` to scan the `contentDOM` of the editor.
+    - When a marker like `:r:` is found in a table cell, we physically **wrap it in a `<span>`** (e.g., `<span class="tinted-cell-marker-wrapper">`).
+    - **Hiding**: By default, this span is styled with `display: inline-block; width: 0; overflow: hidden;`. This effectively removes it from the visual layout.
+    - **Showing**: When the cursor enters the cell (detected via `window.getSelection()`), we add an active class that resets styles to `display: inline; width: auto; opacity: 0.67`, making it visible for editing.
+    - **Risk**: Modifying the DOM managed by CodeMirror is generally risky (can confuse the editor). However, for specific localized changes inside a Table Widget (which is a "block" to CodeMirror), this approach proved to be the only robust way to achieve "zero-width hiding" in Live Preview.
