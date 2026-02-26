@@ -141,3 +141,23 @@ When working with complex CodeMirror widgets (like tables in Obsidian):
 
 ### Key Takeaway
 For elements that Obsidian heavily styles or manages (like HRs, Callouts, etc.), standard CodeMirror decorations might be insufficient. A `ViewPlugin` that patches the DOM *after* the render cycle is a more reliable brute-force method to ensure your styles win.
+
+## 11. Intelligent Selection & Cursor Handling
+
+### The Goal: "Just Works" UX
+We wanted the highlighting commands to feel intuitive, similar to standard bold/italic commands, rather than just blindly inserting text.
+
+### Block Tinting Expansion
+- **Partial/No Selection**: If the user has a blinking cursor or only selects part of a line, we automatically expand the selection to wrap the **entire line(s)** involved.
+- **Multi-line Selection**: Instead of wrapping the exact character range (which might be in the middle of a line), we find the start of the first line and the end of the last line, ensuring the block markers (`/--` and `--/`) are always placed on their own lines or at valid block boundaries.
+
+### Inline Highlighting Logic
+- **Word Detection**: If no text is selected, we automatically identify the **word** under the cursor and wrap it.
+- **Toggle/Unwrap Intelligence**:
+    - Before wrapping, we check if the selection (or word) is *already* wrapped.
+    - **Smart Unwrapping**: If markers are detected, we remove them instead of double-wrapping (avoiding `::::text::::`).
+- **Cursor Preservation**:
+    - When wrapping a word (e.g., `text` -> `::text::`), the cursor position is shifted forward by the marker length (`+2`) to keep it relative to the content (e.g., remaining between 't' and 'e').
+    - When unwrapping, the cursor is shifted back (`-2`).
+    - **Selection Restoration**: After wrapping/unwrapping a selection, we restore the selection range to cover the content, allowing for immediate follow-up edits.
+- **Exceptions**: We explicitly ignore empty double-colons `::::` (no color, no content) to prevent accidental highlighting of artifacts, while still supporting space highlighting `:: ::`.
