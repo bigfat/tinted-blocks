@@ -361,137 +361,138 @@ const blockHighlighter = StateField.define<DecorationSet>({
 
 function createTableTintPlugin() {
     return ViewPlugin.fromClass(class {
-        observer: MutationObserver | null = null;
+        tintedCells: Set<HTMLElement> = new Set();
         
         constructor(view: EditorView) {
-            this.setupObserver(view);
-            // Initial scan
-            requestAnimationFrame(() => this.processTables(view.contentDOM));
+            this.processTables(view);
         }
 
-        update(view: ViewUpdate) {
-            // Re-setup observer if view changed significantly?
-            // Usually contentDOM stays same instance but let's be safe
-            // If doc changed, process immediately (debounced via observer usually, but here we can force)
-            if (view.docChanged || view.viewportChanged) {
-                 requestAnimationFrame(() => this.processTables(view.view.contentDOM));
+        update(update: ViewUpdate) {
+            if (update.docChanged || update.viewportChanged || update.selectionSet) {
+                this.processTables(update.view);
             }
         }
         
-        destroy() {
-            if (this.observer) this.observer.disconnect();
-        }
-        
-        setupObserver(view: EditorView) {
-            if (this.observer) this.observer.disconnect();
-            
-            this.observer = new MutationObserver((mutations) => {
-                let needsUpdate = false;
-                for (const mutation of mutations) {
-                    // Check if mutation is related to tables
-                    if (mutation.target instanceof HTMLElement && mutation.target.closest('table')) {
-                        needsUpdate = true;
-                        break;
-                    }
-                    if (mutation.type === 'characterData' && mutation.target.parentElement?.closest('table')) {
-                        needsUpdate = true;
-                        break;
-                    }
-                }
-                
-                if (needsUpdate) {
-                    this.processTables(view.contentDOM);
-                }
-            });
-            
-            // Observe subtree for character changes (text typing) and childList (structure)
-            this.observer.observe(view.contentDOM, { 
-                childList: true, 
-                subtree: true, 
-                characterData: true 
-            });
-        }
-        
-        processTables(element: HTMLElement) {
+        processTables(view: EditorView) {
              if (!pluginInstance || !pluginInstance.settings.enableTableTint) return;
 
-             const selection = window.getSelection();
-             let activeCell: HTMLElement | null = null;
+             const { state } = view;
+             const doc = state.doc;
+             const newTintedCells = new Set<HTMLElement>();
              
-             if (selection && selection.anchorNode) {
-                 const cell = selection.anchorNode.parentElement?.closest('td, th');
-                 if (cell) {
-                     activeCell = cell as HTMLElement;
-                 }
-             }
-
-             const tables = element.querySelectorAll('table');
-             tables.forEach(table => {
-                 const rows = table.querySelectorAll('tr');
-                 rows.forEach(row => {
-                     const cells = row.querySelectorAll('td, th');
-                     cells.forEach(cell => {
-                         const text = cell.textContent || "";
-                         const match = text.match(/^(\s*)(:[rgbcyma]:)/);
+             // Scan visible ranges for markers
+             for (const { from, to } of view.visibleRanges) {
+                 // Expand range to cover full lines to ensure we parse table rows correctly
+                 const startLine = doc.lineAt(from);
+                 const endLine = doc.lineAt(to);
+                 
+                 for (let i = startLine.number; i <= endLine.number; i++) {
+                     const line = doc.line(i);
+                     const lineText = line.text;
+                     
+                     if (!lineText.includes('|')) continue;
+                     
+                     // Regex to find markers: | :r: OR start of line :r: (if | follows)
+                     // We need to capture the position to find the DOM element
+                     
+                     // 1. Markers preceded by pipe
+                     const regex = /\|(\s*)(:[rgbcyma]:)/g;
+                     let match;
+                     while ((match = regex.exec(lineText)) !== null) {
+                         // match[0] is "| :r:"
+                         // match[1] is " "
+                         // match[2] is ":r:"
                          
-                         // Clean up old wrapped markers if any (from previous logic or if text changed)
-                         // Actually, if we use DOM replacement, we need to handle "unwrapping" if user edits?
-                         // But we are in a MutationObserver loop.
+                         // The marker is at: line.from + match.index + 1 + match[1].length
+                         // We want the cell DOM. 
+                         // The text inside the cell starts at `line.from + match.index + 1`.
+                         const posInCell = line.from + match.index + 1;
                          
-                         // Check if we already have a wrapped marker
-                         const existingWrapper = cell.querySelector('.tinted-cell-marker-wrapper');
-                         
-                         if (match && match[2]) {
-                             const colorCode = match[2].charAt(1); // :r: -> r
-                             
-                             let colorClass = 'tinted-cell-gray';
-                             if (colorCode === 'r') colorClass = 'tinted-cell-red';
-                             if (colorCode === 'g') colorClass = 'tinted-cell-green';
-                             if (colorCode === 'b') colorClass = 'tinted-cell-blue';
-                             if (colorCode === 'y') colorClass = 'tinted-cell-yellow';
-                             if (colorCode === 'c') colorClass = 'tinted-cell-cyan';
-                             if (colorCode === 'm') colorClass = 'tinted-cell-magenta';
-                             if (colorCode === 'a') colorClass = 'tinted-cell-gray';
-                             
-                             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
-                                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
-                                 
-                             // Remove all tint classes
-                             classes.forEach(c => cell.classList.remove(c));
-                             
-                             // Add new class
-                             cell.classList.add(colorClass);
-                             
-                             // Clean up old wrapped markers if present (from previous DOM Logic attempt)
-                             // We are moving to CodeMirror Decoration, so we should NOT wrap here.
-                             // But we might need to remove existing wrappers if any left over?
-                             // Actually, since this runs on contentDOM which is managed by CodeMirror/Obsidian,
-                             // if we modify it, CodeMirror might reset it.
-                             // We strictly only touch CLASSES on the CELL (TD/TH) here.
-                             // We do NOT touch the text content.
-                             
-                             const existingWrapper = cell.querySelector('.tinted-cell-marker-wrapper');
-                             if (existingWrapper) {
-                                 // Unwrap it to be safe
-                                 const parent = existingWrapper.parentNode;
-                                 if (parent) {
-                                     while (existingWrapper.firstChild) {
-                                         parent.insertBefore(existingWrapper.firstChild, existingWrapper);
-                                     }
-                                     parent.removeChild(existingWrapper);
-                                     parent.normalize();
+                         // Attempt to find DOM at this position
+                         // We wrap in try-catch because domAtPos might fail in some edge cases
+                         try {
+                             const domInfo = view.domAtPos(posInCell);
+                             if (domInfo && domInfo.node) {
+                                 const cell = domInfo.node.nodeType === Node.ELEMENT_NODE 
+                                     ? (domInfo.node as HTMLElement).closest('td, th')
+                                     : domInfo.node.parentElement?.closest('td, th');
+                                     
+                                 if (cell && match[2]) {
+                                     const colorCode = match[2].charAt(1);
+                                     this.applyTint(cell as HTMLElement, colorCode);
+                                     newTintedCells.add(cell as HTMLElement);
                                  }
                              }
-                             
-                         } else {
-                             // No match found
-                             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
-                                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
-                             classes.forEach(c => cell.classList.remove(c));
+                         } catch (e) {
+                             // console.error(e);
                          }
-                     });
-                 });
-             });
+                     }
+                     
+                     // 2. Marker at start of line
+                     const startRegex = /^(\s*)(:[rgbcyma]:)(?=.*\|)/;
+                     const startMatch = lineText.match(startRegex);
+                     if (startMatch) {
+                         const posInCell = line.from; // Start of line
+                         try {
+                             const domInfo = view.domAtPos(posInCell);
+                             if (domInfo && domInfo.node) {
+                                 const cell = domInfo.node.nodeType === Node.ELEMENT_NODE 
+                                     ? (domInfo.node as HTMLElement).closest('td, th')
+                                     : domInfo.node.parentElement?.closest('td, th');
+                                     
+                                 if (cell && startMatch[2]) {
+                                     const colorCode = startMatch[2].charAt(1);
+                                     this.applyTint(cell as HTMLElement, colorCode);
+                                     newTintedCells.add(cell as HTMLElement);
+                                 }
+                             }
+                         } catch (e) {
+                             // console.error(e);
+                         }
+                     }
+                 }
+             }
+             
+             // Cleanup: Remove tint from cells that are no longer in the set
+             // But careful: we only scanned visible ranges. 
+             // Ideally we should only clear cells that are IN visible DOM but NOT in newTintedCells.
+             // But `tintedCells` tracks what WE tinted.
+             // If a cell scrolled out of view, it might still be in `tintedCells` but `newTintedCells` won't have it.
+             // We shouldn't keep reference to detached DOM elements.
+             
+             // Let's iterate the OLD set.
+             for (const cell of this.tintedCells) {
+                 if (!newTintedCells.has(cell)) {
+                     // Verify if it's still attached and needs clearing?
+                     // Or just clear it.
+                     this.clearTint(cell);
+                 }
+             }
+             
+             this.tintedCells = newTintedCells;
+        }
+        
+        applyTint(cell: HTMLElement, colorCode: string) {
+            let colorClass = 'tinted-cell-gray';
+            if (colorCode === 'r') colorClass = 'tinted-cell-red';
+            if (colorCode === 'g') colorClass = 'tinted-cell-green';
+            if (colorCode === 'b') colorClass = 'tinted-cell-blue';
+            if (colorCode === 'y') colorClass = 'tinted-cell-yellow';
+            if (colorCode === 'c') colorClass = 'tinted-cell-cyan';
+            if (colorCode === 'm') colorClass = 'tinted-cell-magenta';
+            if (colorCode === 'a') colorClass = 'tinted-cell-gray';
+            
+            // Optimization: check if already has class
+            if (cell.classList.contains(colorClass)) return;
+            
+            this.clearTint(cell);
+            cell.classList.add(colorClass);
+        }
+        
+        clearTint(cell: HTMLElement) {
+             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
+                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
+             cell.classList.remove(...classes);
         }
     });
 }
