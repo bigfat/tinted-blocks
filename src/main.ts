@@ -455,109 +455,39 @@ function createTableTintPlugin() {
                              
                              const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
                                  'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
+                                 
+                             // Remove all tint classes
                              classes.forEach(c => cell.classList.remove(c));
+                             
+                             // Add new class
                              cell.classList.add(colorClass);
                              
-                             // DOM Wrapping Logic
-                             // We want to wrap the match[0] (whitespace + marker) or just marker?
-                             // match[1] is whitespace, match[2] is marker.
-                             // We wrap match[2].
+                             // Clean up old wrapped markers if present (from previous DOM Logic attempt)
+                             // We are moving to CodeMirror Decoration, so we should NOT wrap here.
+                             // But we might need to remove existing wrappers if any left over?
+                             // Actually, since this runs on contentDOM which is managed by CodeMirror/Obsidian,
+                             // if we modify it, CodeMirror might reset it.
+                             // We strictly only touch CLASSES on the CELL (TD/TH) here.
+                             // We do NOT touch the text content.
                              
-                             const isActive = (cell === activeCell);
-                             
-                             if (!existingWrapper) {
-                                 // Need to wrap.
-                                 // Find text node.
-                                 const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null);
-                                 let node = walker.nextNode();
-                                 if (node && node.textContent) {
-                                     const nodeText = node.textContent;
-                                     const nodeMatch = nodeText.match(/^(\s*)(:[rgbcyma]:)/);
-                                     if (nodeMatch && nodeMatch[2]) {
-                                         // Found it.
-                                         // Split node: [whitespace] [marker] [rest]
-                                         const whitespace = nodeMatch[1];
-                                         const marker = nodeMatch[2];
-                                         const rest = nodeText.substring(nodeMatch[0].length);
-                                         
-                                         const fragment = document.createDocumentFragment();
-                                         if (whitespace) fragment.appendChild(document.createTextNode(whitespace));
-                                         
-                                         const span = document.createElement('span');
-                                         span.className = 'tinted-cell-marker-wrapper';
-                                         span.textContent = marker;
-                                         // Apply initial state
-                                         if (isActive) span.classList.add('tinted-cell-marker-active');
-                                         
-                                         fragment.appendChild(span);
-                                         if (rest) fragment.appendChild(document.createTextNode(rest));
-                                         
-                                         // Replace
-                                         if (node.parentNode) {
-                                             node.parentNode.replaceChild(fragment, node);
-                                             
-                                             // Restore cursor?
-                                             // If we just modified DOM while typing, cursor might be lost.
-                                             // But MutationObserver runs async.
-                                             // If cursor was in `node`, we need to put it back.
-                                             // This is the risky part.
-                                             // But for "Hidden when not active", usually we are not typing IN the marker.
-                                             // If we are typing, we are active.
-                                             // If we are active, we show the marker.
-                                         }
-                                     }
-                                 }
-                             } else {
-                                 // Already wrapped. Update active state.
-                                 if (isActive) {
-                                     if (!existingWrapper.classList.contains('tinted-cell-marker-active')) {
-                                         existingWrapper.classList.add('tinted-cell-marker-active');
-                                     }
-                                 } else {
-                                     if (existingWrapper.classList.contains('tinted-cell-marker-active')) {
-                                         existingWrapper.classList.remove('tinted-cell-marker-active');
-                                     }
-                                 }
-                                 
-                                 // Also verify content is still correct (user might have edited inside span)
-                                 // If text inside span no longer matches marker syntax, unwrap it?
-                                 // But Obsidian might handle contenteditable inside span weirdly.
-                                 // Let's rely on Obsidian to manage text changes. 
-                                 // If user deletes char in span, MutationObserver fires.
-                                 // We re-scan.
-                                 // If text doesn't match `^...`, we go to `else` block below.
-                             }
-                             
-                             if (isActive) {
-                                 cell.classList.add('tinted-cell-active');
-                             } else {
-                                 cell.classList.remove('tinted-cell-active');
-                             }
-                             
-                         } else {
-                             // No match found in text (or text is inside wrapper already?)
-                             // If we wrapped it, `text` (textContent) still contains the marker!
-                             // So match SHOULD succeed even if wrapped.
-                             
-                             // If match failed, it means marker is gone or invalid.
-                             // Remove classes.
-                             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
-                                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
-                             classes.forEach(c => cell.classList.remove(c));
-                             cell.classList.remove('tinted-cell-active');
-                             
-                             // Unwrap if exists (cleanup)
+                             const existingWrapper = cell.querySelector('.tinted-cell-marker-wrapper');
                              if (existingWrapper) {
+                                 // Unwrap it to be safe
                                  const parent = existingWrapper.parentNode;
                                  if (parent) {
                                      while (existingWrapper.firstChild) {
                                          parent.insertBefore(existingWrapper.firstChild, existingWrapper);
                                      }
                                      parent.removeChild(existingWrapper);
-                                     // Merge text nodes? normalize()
                                      parent.normalize();
                                  }
                              }
+                             
+                         } else {
+                             // No match found
+                             const classes = ['tinted-cell-red', 'tinted-cell-green', 'tinted-cell-blue', 
+                                 'tinted-cell-yellow', 'tinted-cell-cyan', 'tinted-cell-magenta', 'tinted-cell-gray'];
+                             classes.forEach(c => cell.classList.remove(c));
                          }
                      });
                  });
