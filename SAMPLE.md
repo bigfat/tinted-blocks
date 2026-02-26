@@ -2,41 +2,41 @@
 
 This note demonstrates the various styling capabilities of the **Tinted Blocks** plugin.
 
-## 1. Block Highlighting
+## 1. Block Tinting
 
-You can wrap content in colored blocks using the syntax `::>color` and `<::`.
+You can wrap content in colored blocks using the syntax `/--color` and `--/`.
 
 ### Basic Colors
 
-::>blue
+/--blue
 **Blue Block**
 This block uses the standard CSS color `blue`.
 It's great for informational notes or calm sections.
-<::
+--/
 
-::>red
+/--red
 **Red Block**
 This block uses `red`.
 Perfect for warnings, errors, or important notices.
-<::
+--/
 
-::>green
+/--green
 **Green Block**
 This block uses `green`.
 Use this for success messages, tips, or positive outcomes.
-<::
+--/
 
-::>gold
+/--gold
 **Gold Block**
 This uses the CSS color `gold`.
 Excellent for highlighting key takeaways or premium content.
-<::
+--/
 
 ### Rich Content Support
 
 Blocks can contain more than just text.
 
-::>#663399
+/--#663399
 **Complex Block (Purple)**
 
 - [x] Task list item 1
@@ -48,14 +48,14 @@ Blocks can contain more than just text.
 
 1. Numbered list
 2. Another item
-<::
+--/
 
 ### Edge Cases
 
-::>
+/--
 **Default Color Block**
 If you don't specify a color (or use an invalid one), it falls back to your default setting (e.g., Grey).
-<::
+--/
 
 ---
 
@@ -68,27 +68,46 @@ Highlight text within a line using neon-style markers.
 - **Green**: This is ::g:green highlight:: for success.
 - **Blue**: This is ::b:blue highlight:: for cool notes.
 - **Yellow**: This is ::y:yellow highlight:: explicit yellow.
+- **Cyan**: This is ::c:cyan highlight:: for cool vibes.
+- **Magenta**: This is ::m:magenta highlight:: for bold notes.
 
 ### Mixed Usage
 
 You can mix inline highlights inside tinted blocks!
 
-::>#2c3e50
+/--#2c3e50
 **Dark Block with Highlights**
 
 Here is some text with a ::g:green highlight:: inside a dark block.
 And here is a ::r:red warning::.
-<::
+--/
 
 ### Code Conflict Test
 
 The plugin should NOT highlight text inside inline code or code blocks.
 
-- Inline Code: `::>color` and `<::` should render as code, not highlights.
+- Inline Code: `/--color` and `--/` should render as code, not highlights.
 - Code Block:
   ```
-  ::>red
+  /--red
   This should not be highlighted.
-  <::
+  --/
   ```
 - Inline highlight inside code: `::text::`
+
+---
+
+## 3. Table Cell Tinting
+
+Add background colors to table cells.
+
+| Color | Example |
+| :--- | :--- |
+| **Red** | :r: This cell is red |
+| **Green** | :g: This cell is green |
+| **Blue** | :b: This cell is blue |
+| **Yellow** | :y: This cell is yellow |
+| **Cyan** | :c: This cell is cyan |
+| **Magenta** | :m: This cell is magenta |
+| **Gray** | :a: This cell is gray |
+

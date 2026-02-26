@@ -1,0 +1,322 @@
+
+import { RangeSetBuilder, StateField, EditorState } from '@codemirror/state';
+import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
+import { MyPluginSettings } from './settings';
+import { normalizeColor, removeTextFromStart, removeTextFromEnd } from './utils';
+
+// Interface to avoid circular dependency
+interface IPlugin {
+    settings: MyPluginSettings;
+}
+
+// ============================================================
+// 1. 编辑模式 (Live Preview) - 块级高亮
+// ============================================================
+
+const bgDecoration = (color: string, type: 'start' | 'mid' | 'end', active: boolean) => {
+    const classes = ['tinted-block'];
+    if (type === 'start') classes.push('tinted-block-start');
+    if (type === 'end') classes.push('tinted-block-end');
+    if (active) classes.push('tinted-block-active');
+    
+    const style = `--tint-color: ${color}`;
+    
+    return Decoration.line({
+        attributes: { 
+            class: classes.join(' '),
+            style: style
+        }
+    });
+};
+
+function buildBlockDecorations(state: EditorState, plugin: IPlugin): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+    const doc = state.doc;
+    const selection = state.selection.main;
+    
+    if (!plugin || !plugin.settings.enableBlockTint) return builder.finish();
+
+    const startMarker = plugin.settings.blockStartMarker;
+    const endMarker = plugin.settings.blockEndMarker;
+    
+    const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    const startRegex = new RegExp(`^${escapeRegExp(startMarker)}(.*)$`);
+    const endRegex = new RegExp(`^${escapeRegExp(endMarker)}\\s*$`);
+
+    const blocks: {start: number, end: number, color: string}[] = [];
+    let currentStart = -1;
+    let currentColor = "";
+
+    for (let i = 1; i <= doc.lines; i++) {
+        const line = doc.line(i);
+        const startMatch = line.text.match(startRegex);
+        const endMatch = line.text.match(endRegex);
+
+        if (startMatch) {
+            currentStart = i;
+            currentColor = normalizeColor(startMatch[1] || "", plugin.settings);
+        } else if (endMatch && currentStart !== -1) {
+            blocks.push({ start: currentStart, end: i, color: currentColor });
+            currentStart = -1;
+            currentColor = "";
+        }
+    }
+
+    const lineActions = new Map<number, {type: 'start'|'mid'|'end', color: string, active: boolean}>();
+    
+    for (let block of blocks) {
+        const startLineObj = doc.line(block.start);
+        const endLineObj = doc.line(block.end);
+        
+        const isActive = selection.head >= startLineObj.from && selection.head <= endLineObj.to;
+
+        lineActions.set(block.start, { type: 'start', color: block.color, active: isActive });
+        lineActions.set(block.end, { type: 'end', color: block.color, active: isActive });
+        for (let k = block.start + 1; k < block.end; k++) {
+            lineActions.set(k, { type: 'mid', color: block.color, active: isActive });
+        }
+    }
+
+    for (let i = 1; i <= doc.lines; i++) {
+        const action = lineActions.get(i);
+        if (!action) continue;
+        const line = doc.line(i);
+
+        builder.add(line.from, line.from, bgDecoration(action.color, action.type, action.active));
+    }
+    return builder.finish();
+}
+
+export const createBlockTinter = (plugin: IPlugin) => StateField.define<DecorationSet>({
+    create(state) { return buildBlockDecorations(state, plugin); },
+    update(oldDecos, tr) {
+        if (tr.docChanged || tr.selection) return buildBlockDecorations(tr.state, plugin);
+        return oldDecos;
+    },
+    provide: field => EditorView.decorations.from(field)
+});
+
+
+// ============================================================
+// Reading View Logic
+// ============================================================
+
+// Use MutationObserver instead of timeout for reliable detection
+const activeObservers = new Map<HTMLElement, MutationObserver>();
+
+function queueWrapping(element: HTMLElement, settings: MyPluginSettings) {
+    if (!element.parentElement) {
+        // Wait for attachment
+        let attempts = 0;
+        const checkParent = () => {
+            if (element.parentElement) {
+                setupObserver(element.parentElement, settings);
+            } else if (attempts < 10) {
+                attempts++;
+                window.setTimeout(checkParent, 20);
+            }
+        };
+        checkParent();
+    } else {
+        setupObserver(element.parentElement, settings);
+    }
+}
+
+function setupObserver(container: HTMLElement, settings: MyPluginSettings) {
+    if (activeObservers.has(container)) return;
+
+    // Debounce the actual processing
+    let timeout: number | null = null;
+    
+    const process = () => {
+        wrapMarkedBlocks(container, settings);
+    };
+
+    const observer = new MutationObserver((mutations) => {
+        // Disconnect immediately to prevent loops
+        observer.disconnect();
+        
+        if (timeout) window.clearTimeout(timeout);
+        timeout = window.setTimeout(process, 100);
+    });
+
+    observer.observe(container, { childList: true });
+    activeObservers.set(container, observer);
+    
+    // Also trigger once initially in case everything is already there
+    if (timeout) window.clearTimeout(timeout);
+    timeout = window.setTimeout(process, 100);
+}
+
+function wrapMarkedBlocks(container: HTMLElement, settings: MyPluginSettings) {
+    const observer = activeObservers.get(container);
+    if (observer) observer.disconnect();
+
+    try {
+        const children = Array.from(container.children) as HTMLElement[];
+        
+        // CLEANUP STEP: Remove all existing styling classes from this container's children.
+        children.forEach(child => {
+            child.classList.remove('tinted-block-item', 'tinted-block-item-start', 'tinted-block-item-end');
+            child.style.removeProperty('--tint-color');
+        });
+        
+        const startMarker = settings.blockStartMarker;
+        const endMarker = settings.blockEndMarker;
+        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const startRegex = new RegExp(`^\\s*${escapeRegExp(startMarker)}(.*)`); 
+        const endRegex = new RegExp(`${escapeRegExp(endMarker)}\\s*$`); 
+
+        let startEl: HTMLElement | null = null;
+        let elementsToWrap: HTMLElement[] = [];
+        let currentColor = "";
+        let startMarkerText = "";
+
+        for (const child of children) {
+            let isStart = false;
+            let isEnd = false;
+            let currentStartMarker = "";
+            let currentEndMarker = "";
+            let color = "";
+
+            // Check dataset first (fast path)
+            if (child.dataset.tintedStart) {
+                isStart = true;
+                currentStartMarker = child.dataset.tintedStartMarker || "";
+                color = child.dataset.tintedColor || "";
+            } else {
+                // Fallback: Check text content
+                const text = child.textContent || "";
+                const match = text.match(startRegex);
+                if (match) {
+                    isStart = true;
+                    currentStartMarker = match[0];
+                    color = normalizeColor(match[1] || "", settings);
+                    // Save to dataset for future efficiency
+                    child.dataset.tintedStart = "true";
+                    child.dataset.tintedStartMarker = currentStartMarker;
+                    child.dataset.tintedColor = color;
+                }
+            }
+
+            // Check End
+            if (child.dataset.tintedEnd) {
+                isEnd = true;
+                currentEndMarker = child.dataset.tintedEndMarker || "";
+            } else {
+                // Fallback
+                const text = child.textContent || "";
+                const match = text.match(endRegex);
+                if (match) {
+                    isEnd = true;
+                    currentEndMarker = match[0];
+                    child.dataset.tintedEnd = "true";
+                    child.dataset.tintedEndMarker = currentEndMarker;
+                }
+            }
+
+            // Logic State Machine
+            if (isStart) {
+                startEl = child;
+                currentColor = color;
+                startMarkerText = currentStartMarker;
+                elementsToWrap = [child];
+                
+                if (isEnd) {
+                    performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
+                    startEl = null;
+                    elementsToWrap = [];
+                }
+                continue;
+            }
+
+            if (startEl) {
+                elementsToWrap.push(child);
+                
+                if (isEnd) {
+                    performWrap(container, elementsToWrap, currentColor, startMarkerText, currentEndMarker);
+                    startEl = null;
+                    elementsToWrap = [];
+                }
+            }
+        }
+    } finally {
+        if (observer) {
+            observer.observe(container, { childList: true });
+        }
+    }
+}
+
+function performWrap(container: HTMLElement, elements: HTMLElement[], color: string, startMarker: string, endMarker: string) {
+    if (elements.length === 0) return;
+    
+    elements.forEach((el, index) => {
+        el.addClass("tinted-block-item");
+        el.style.setProperty("--tint-color", color);
+        
+        if (index === 0) {
+            el.addClass("tinted-block-item-start");
+        }
+        if (index === elements.length - 1) {
+            el.addClass("tinted-block-item-end");
+        }
+    });
+
+    // Clean text
+    const firstEl = elements[0];
+    if (elements.length > 0 && startMarker && firstEl) {
+         removeTextFromStart(firstEl, startMarker);
+    }
+    const lastEl = elements[elements.length-1];
+    if (elements.length > 0 && endMarker && lastEl) {
+         removeTextFromEnd(lastEl, endMarker);
+    }
+}
+
+export function processBlockTint(element: HTMLElement, settings: MyPluginSettings) {
+    const startMarker = settings.blockStartMarker;
+    const endMarker = settings.blockEndMarker;
+    const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    const startRegex = new RegExp(`^\\s*${escapeRegExp(startMarker)}(.*)`); 
+    const endRegex = new RegExp(`${escapeRegExp(endMarker)}\\s*$`); 
+    
+    let children = Array.from(element.children) as HTMLElement[];
+    if (children.length === 0) children = [element];
+
+    let hasWork = false;
+
+    for (const child of children) {
+        const text = child.textContent || "";
+        
+        // Check Start
+        const startMatch = text.match(startRegex);
+        if (startMatch) {
+            element.dataset.tintedStart = "true";
+            element.dataset.tintedStartMarker = startMatch[0]; 
+            const rawColor = startMatch[1] || "";
+            element.dataset.tintedColor = normalizeColor(rawColor, settings);
+            hasWork = true;
+        }
+
+        // Check End
+        const endMatch = text.match(endRegex);
+        if (endMatch) {
+            element.dataset.tintedEnd = "true";
+            element.dataset.tintedEndMarker = endMatch[0];
+            hasWork = true;
+        }
+    }
+
+    if (hasWork) {
+        queueWrapping(element, settings);
+    }
+}
+
+export function cleanupBlockTintObservers() {
+    for (const observer of activeObservers.values()) {
+        observer.disconnect();
+    }
+    activeObservers.clear();
+}
