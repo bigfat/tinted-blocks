@@ -242,6 +242,9 @@ const blockHighlighter = StateField.define<DecorationSet>({
                 const doc = state.doc;
                 const selection = state.selection.main;
                 
+                // Check view mode
+                const isLivePreview = view.dom.closest('.is-live-preview');
+                
                 // Marker configuration
                 const marker = pluginInstance ? pluginInstance.settings.inlineMarker : '::';
                 const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -304,8 +307,13 @@ const blockHighlighter = StateField.define<DecorationSet>({
                         
                         // Add Decorations
                         
-                        if (isCursorInside) {
-                            // 1. Start Marker (Visible but faint)
+                        // If Source Mode (not Live Preview), we ALWAYS show markers (no auto-hide).
+                        // If Live Preview, we show markers only if cursor is inside.
+                        const showMarkers = !isLivePreview || isCursorInside;
+
+                        if (showMarkers) {
+                            // 1. Start Marker (Visible)
+                            // Note: In Source Mode, CSS overrides will reset opacity/size to normal
                             builder.add(startMarkerFrom, startMarkerTo, Decoration.mark({ 
                                 class: `tinted-inline-marker tinted-inline-visible tinted-inline-start ${colorClass}` 
                             }));
@@ -315,13 +323,13 @@ const blockHighlighter = StateField.define<DecorationSet>({
                                 class: `tinted-inline-content ${colorClass}` 
                             }));
                             
-                            // 3. End Marker (Visible but faint)
+                            // 3. End Marker (Visible)
                             builder.add(endMarkerFrom, endMarkerTo, Decoration.mark({ 
                                 class: `tinted-inline-marker tinted-inline-visible tinted-inline-end ${colorClass}` 
                             }));
                             
                         } else {
-                            // Cursor outside: Hide markers, show content
+                            // Cursor outside (Live Preview only): Hide markers, show content
                             // Use Decoration.replace({}) to collapse space of markers
                             builder.add(startMarkerFrom, startMarkerTo, Decoration.replace({})); 
                             builder.add(contentFrom, contentTo, Decoration.mark({ class: `tinted-inline ${colorClass}` }));
@@ -557,11 +565,10 @@ function createTableMarkerHighlighter() {
             const builder = new RangeSetBuilder<Decoration>();
             if (pluginInstance && !pluginInstance.settings.enableTableTint) return builder.finish();
 
-            // Check if we are in Live Preview mode
-            // Source mode usually doesn't have the 'is-live-preview' class on the container
-            // We can check the parent element of the editor
+            // Check view mode
+            // We want to run in BOTH Live Preview AND Source Mode now.
+            // But we need to know which mode we are in to decide behavior.
             const isLivePreview = view.dom.closest('.is-live-preview');
-            if (!isLivePreview) return builder.finish();
 
             const { state } = view;
             const doc = state.doc;
@@ -573,10 +580,6 @@ function createTableMarkerHighlighter() {
                 
                 // Regex: Match :r: at start of line OR after a pipe
                 // Support both standard tables (| :r:) and nested editor content (:r:)
-                // Note: In nested editor, the text IS just ":r: text", so ^ works.
-                // In main editor, it is "| :r: text".
-                
-                // We use a global regex to find all matches in the range
                 const regex = /(?:^|\|)(\s*)(:[rgbcyma]:)/g;
                 
                 let match;
@@ -585,14 +588,8 @@ function createTableMarkerHighlighter() {
                     // match[1] is whitespace
                     // match[2] is ":r:"
                     
-                    // Calculate absolute start position
-                    // match.index is relative to 'from'
                     const matchStartInString = match.index;
                     const fullMatchStr = match[0];
-                    
-                    // We need to find where the marker starts.
-                    // If it started with |, skip 1 char.
-                    // But we used a group (?:^|\|), so it's part of match[0].
                     
                     let offset = 0;
                     if (fullMatchStr.startsWith('|')) {
@@ -604,13 +601,23 @@ function createTableMarkerHighlighter() {
                     
                     const isCursorInside = selection.head >= markerStart && selection.head <= markerEnd;
                     
-                    if (isCursorInside) {
-                         // Show marker (faint, small)
+                    // Logic:
+                    // 1. Source Mode: ALWAYS show marker, but use 'visible' class (faint).
+                    // 2. Live Preview (Active Cell): Show marker (faint).
+                    // 3. Live Preview (Inactive Cell): Hide marker (collapsed).
+                    
+                    if (!isLivePreview) {
+                        // Source Mode -> Show Faint
+                        builder.add(markerStart, markerEnd, Decoration.mark({
+                            class: 'tinted-cell-marker-visible' 
+                        }));
+                    } else if (isCursorInside) {
+                         // Live Preview + Active -> Show Faint (Small)
                          builder.add(markerStart, markerEnd, Decoration.mark({
                             class: 'tinted-cell-marker-visible' 
                         }));
                     } else {
-                         // Hide marker completely (collapse space)
+                         // Live Preview + Inactive -> Hide
                          builder.add(markerStart, markerEnd, Decoration.replace({}));
                     }
                 }
