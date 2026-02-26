@@ -376,100 +376,135 @@ function createTableTintPlugin() {
         processTables(view: EditorView) {
              if (!pluginInstance || !pluginInstance.settings.enableTableTint) return;
 
-             const { state } = view;
-             const doc = state.doc;
-             const newTintedCells = new Set<HTMLElement>();
-             
-             // Scan visible ranges for markers
-             for (const { from, to } of view.visibleRanges) {
-                 // Expand range to cover full lines to ensure we parse table rows correctly
-                 const startLine = doc.lineAt(from);
-                 const endLine = doc.lineAt(to);
+             // Use requestAnimationFrame to scan DOM after update
+             requestAnimationFrame(() => {
+                 const tables = view.contentDOM.querySelectorAll('table');
                  
-                 for (let i = startLine.number; i <= endLine.number; i++) {
-                     const line = doc.line(i);
-                     const lineText = line.text;
-                     
-                     if (!lineText.includes('|')) continue;
-                     
-                     // Regex to find markers: | :r: OR start of line :r: (if | follows)
-                     // We need to capture the position to find the DOM element
-                     
-                     // 1. Markers preceded by pipe
-                     const regex = /\|(\s*)(:[rgbcyma]:)/g;
-                     let match;
-                     while ((match = regex.exec(lineText)) !== null) {
-                         // match[0] is "| :r:"
-                         // match[1] is " "
-                         // match[2] is ":r:"
-                         
-                         // The marker is at: line.from + match.index + 1 + match[1].length
-                         // We want the cell DOM. 
-                         // The text inside the cell starts at `line.from + match.index + 1`.
-                         const posInCell = line.from + match.index + 1;
-                         
-                         // Attempt to find DOM at this position
-                         // We wrap in try-catch because domAtPos might fail in some edge cases
-                         try {
-                             const domInfo = view.domAtPos(posInCell);
-                             if (domInfo && domInfo.node) {
-                                 const cell = domInfo.node.nodeType === Node.ELEMENT_NODE 
-                                     ? (domInfo.node as HTMLElement).closest('td, th')
-                                     : domInfo.node.parentElement?.closest('td, th');
-                                     
-                                 if (cell && match[2]) {
-                                     const colorCode = match[2].charAt(1);
-                                     this.applyTint(cell as HTMLElement, colorCode);
-                                     newTintedCells.add(cell as HTMLElement);
-                                 }
+                 // Check cursor position for visibility logic
+                 const selection = window.getSelection();
+                 let activeCell: HTMLElement | null = null;
+                 if (selection && selection.anchorNode) {
+                      const node = selection.anchorNode;
+                      if (node.nodeType === Node.ELEMENT_NODE) {
+                          activeCell = (node as HTMLElement).closest('td, th');
+                      } else if (node.parentElement) {
+                          activeCell = node.parentElement.closest('td, th');
+                      }
+                  }
+
+                 tables.forEach(table => {
+                     const rows = table.querySelectorAll('tr');
+                     rows.forEach(row => {
+                         const cells = row.querySelectorAll('td, th');
+                         cells.forEach(cell => {
+                             const text = cell.textContent || "";
+                             const match = text.match(/^(\s*)(:[rgbcyma]:)/);
+                             
+                             if (match && match[2]) {
+                                  const colorCode = match[2].charAt(1);
+                                  this.applyTint(cell as HTMLElement, colorCode);
+                                  
+                                  // Handle Marker Hiding/Showing
+                                  this.handleMarkerWrapper(cell as HTMLElement, match[0], match[1] || "", match[2], activeCell === cell);
+                              } else {
+                                 // No marker found, clear tint
+                                 this.clearTint(cell as HTMLElement);
+                                 // Remove wrapper if exists
+                                 this.unwrapMarker(cell as HTMLElement);
                              }
-                         } catch (e) {
-                             // console.error(e);
-                         }
-                     }
-                     
-                     // 2. Marker at start of line
-                     const startRegex = /^(\s*)(:[rgbcyma]:)(?=.*\|)/;
-                     const startMatch = lineText.match(startRegex);
-                     if (startMatch) {
-                         const posInCell = line.from; // Start of line
-                         try {
-                             const domInfo = view.domAtPos(posInCell);
-                             if (domInfo && domInfo.node) {
-                                 const cell = domInfo.node.nodeType === Node.ELEMENT_NODE 
-                                     ? (domInfo.node as HTMLElement).closest('td, th')
-                                     : domInfo.node.parentElement?.closest('td, th');
-                                     
-                                 if (cell && startMatch[2]) {
-                                     const colorCode = startMatch[2].charAt(1);
-                                     this.applyTint(cell as HTMLElement, colorCode);
-                                     newTintedCells.add(cell as HTMLElement);
-                                 }
-                             }
-                         } catch (e) {
-                             // console.error(e);
-                         }
-                     }
-                 }
-             }
-             
-             // Cleanup: Remove tint from cells that are no longer in the set
-             // But careful: we only scanned visible ranges. 
-             // Ideally we should only clear cells that are IN visible DOM but NOT in newTintedCells.
-             // But `tintedCells` tracks what WE tinted.
-             // If a cell scrolled out of view, it might still be in `tintedCells` but `newTintedCells` won't have it.
-             // We shouldn't keep reference to detached DOM elements.
-             
-             // Let's iterate the OLD set.
-             for (const cell of this.tintedCells) {
-                 if (!newTintedCells.has(cell)) {
-                     // Verify if it's still attached and needs clearing?
-                     // Or just clear it.
-                     this.clearTint(cell);
-                 }
-             }
-             
-             this.tintedCells = newTintedCells;
+                         });
+                     });
+                 });
+             });
+        }
+        
+        handleMarkerWrapper(cell: HTMLElement, fullMatch: string, whitespace: string, marker: string, isActive: boolean) {
+            // Check if wrapper exists
+            let wrapper = cell.querySelector('.tinted-cell-marker-wrapper') as HTMLElement;
+            
+            if (!wrapper) {
+                // Create wrapper
+                // We need to find the text node containing the marker
+                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null);
+                let node = walker.nextNode();
+                let foundNode: Node | null = null;
+                
+                // Find the node that starts with the marker (ignoring whitespace)
+                // match[0] is e.g. " :r:"
+                // The text node might contain " :r: content"
+                while (node) {
+                    if (node.textContent && node.textContent.includes(marker)) {
+                         foundNode = node;
+                         break;
+                    }
+                    node = walker.nextNode();
+                }
+                
+                if (foundNode) {
+                    const text = foundNode.textContent || "";
+                    const markerIndex = text.indexOf(marker);
+                    
+                    if (markerIndex >= 0) {
+                        // Split text node
+                        // Before: "  :r: content"
+                        // After: "  " + <span class="wrapper">:r:</span> + " content"
+                        
+                        const beforeText = text.substring(0, markerIndex);
+                        const afterText = text.substring(markerIndex + marker.length);
+                        
+                        const newWrapper = document.createElement('span');
+                        newWrapper.className = 'tinted-cell-marker-wrapper';
+                        newWrapper.textContent = marker;
+                        // Important: CodeMirror might get confused if we mess up the structure too much.
+                        // But let's try.
+                        
+                        const parent = foundNode.parentNode;
+                        if (parent) {
+                            if (beforeText) parent.insertBefore(document.createTextNode(beforeText), foundNode);
+                            parent.insertBefore(newWrapper, foundNode);
+                            if (afterText) parent.insertBefore(document.createTextNode(afterText), foundNode);
+                            
+                            parent.removeChild(foundNode);
+                            wrapper = newWrapper;
+                        }
+                    }
+                }
+            }
+            
+            // Update visibility class
+            if (wrapper) {
+                // If active (cursor in cell), show it (faint, small)
+                // If inactive, hide it (width 0)
+                
+                const visibleClass = 'tinted-cell-marker-visible';
+                const hiddenClass = 'tinted-cell-marker-hidden'; // We need to define this in CSS
+                
+                // Also ensure we don't trigger unnecessary DOM mutations
+                if (isActive) {
+                    if (!wrapper.classList.contains(visibleClass)) {
+                        wrapper.classList.remove(hiddenClass);
+                        wrapper.classList.add(visibleClass);
+                    }
+                } else {
+                    if (!wrapper.classList.contains(hiddenClass)) {
+                        wrapper.classList.remove(visibleClass);
+                        wrapper.classList.add(hiddenClass);
+                    }
+                }
+            }
+        }
+        
+        unwrapMarker(cell: HTMLElement) {
+            const wrapper = cell.querySelector('.tinted-cell-marker-wrapper');
+            if (wrapper) {
+                const parent = wrapper.parentNode;
+                if (parent) {
+                    const text = wrapper.textContent || "";
+                    const textNode = document.createTextNode(text);
+                    parent.replaceChild(textNode, wrapper);
+                    parent.normalize(); // Merge adjacent text nodes
+                }
+            }
         }
         
         applyTint(cell: HTMLElement, colorCode: string) {

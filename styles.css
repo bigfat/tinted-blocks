@@ -408,6 +408,23 @@
     /* vertical-align: middle; */
 }
 
+/* Hidden marker (when cursor outside) - Table Cell Tint */
+.tinted-cell-marker-hidden {
+    /* Effectively hide the element and take up no space */
+    display: inline-block !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    
+    /* Double safety: make transparent */
+    color: transparent !important;
+    font-size: 0 !important;
+    
+    /* Remove padding/margins */
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
 /* Dark mode adjustment */
 @media (prefers-color-scheme: dark) {
     .tinted-inline-visible,
