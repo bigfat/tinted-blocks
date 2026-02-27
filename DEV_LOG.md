@@ -161,3 +161,28 @@ We wanted the highlighting commands to feel intuitive, similar to standard bold/
     - When unwrapping, the cursor is shifted back (`-2`).
     - **Selection Restoration**: After wrapping/unwrapping a selection, we restore the selection range to cover the content, allowing for immediate follow-up edits.
 - **Exceptions**: We explicitly ignore empty double-colons `::::` (no color, no content) to prevent accidental highlighting of artifacts, while still supporting space highlighting `:: ::`.
+
+## 12. Collapsible Blocks in Editing Mode (Live Preview)
+
+### The Goal
+Provide a native-feeling collapsible block experience in Live Preview, similar to Obsidian's Callouts or Headings, but with custom styling and behavior tailored for tinted blocks.
+
+### Solution: CodeMirror `foldService`
+We leveraged the `@codemirror/language` `foldService` to define custom fold ranges.
+
+### Key Implementation Details
+1.  **Fold Range Strategy**: 
+    - Initially, we tried folding from the Start Marker line. This resulted in "ghost" arrows appearing on the header line and duplicate arrow issues.
+    - **Refined Strategy**: We now register the fold starting from the **end of the first content line** (Line 2). 
+    - This ensures the first line of content remains visible as a "preview" or "header" for the block.
+    - The fold widget (`...`) appears naturally at the end of this content line.
+
+2.  **Custom Styling & Positioning**:
+    - **Targeting**: We use CSS to target `.tinted-block .cm-fold-indicator`.
+    - **Positioning**: Forced `position: absolute` with `left: -32px` to move the arrow out of the content area, aligning it visually with the gutter/header arrows.
+    - **Overflow**: Added `overflow: visible` to the block container to prevent clipping of the arrow.
+    - **Size**: Reduced icon size to `11px` (90% of standard) for a refined look.
+
+3.  **Collapsed State**:
+    - **Arrow Color**: When collapsed (right-pointing arrow), it uses the block's tint color with 40% transparency (60% opacity) to distinctively mark it as a collapsed tinted block.
+    - **Placeholder**: The `...` fold placeholder is styled to match, with a transparent background and tinted text color, creating a seamless integration.

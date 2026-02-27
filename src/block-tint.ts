@@ -1,4 +1,4 @@
-
+import { setIcon } from 'obsidian';
 import { RangeSetBuilder, StateField, EditorState, Prec } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { MyPluginSettings } from './settings';
@@ -252,6 +252,9 @@ function wrapMarkedBlocks(container: HTMLElement, settings: MyPluginSettings) {
         children.forEach(child => {
             child.classList.remove('tinted-block-item', 'tinted-block-item-start', 'tinted-block-item-end');
             child.style.removeProperty('--tint-color');
+            // Remove indicator if present to ensure we re-bind with correct elements
+            const indicator = child.querySelector('.tinted-block-collapse-indicator');
+            if (indicator) indicator.remove();
         });
         
         const startMarker = settings.blockStartMarker;
@@ -349,6 +352,106 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
         
         if (index === 0) {
             el.addClass("tinted-block-item-start");
+            
+            // Add Collapse Indicator
+            // Check if it already exists to avoid duplicates
+            if (!el.querySelector('.tinted-block-collapse-indicator')) {
+                const indicator = el.createEl('div', { cls: 'tinted-block-collapse-indicator' });
+                
+                // Check if already collapsed (state persistence in DOM)
+                const isCollapsed = el.hasClass('is-collapsed');
+                setIcon(indicator, isCollapsed ? 'chevron-right' : 'chevron-down');
+                
+                if (isCollapsed) {
+                    // When collapsed:
+                    // Show first 3 content lines (index 1, 2, 3) + start marker line (index 0)
+                    // Hide everything else.
+                    let lastVisibleIndex = 0;
+                    
+                    elements.forEach((sibling, i) => {
+                        if (i === 0) {
+                             sibling.style.display = '';
+                             lastVisibleIndex = i;
+                        } else if (i >= 1 && i <= 3 && i < elements.length - 1) {
+                            sibling.style.display = '';
+                             // Ensure it has height and force block display to ensure it takes vertical space
+                            sibling.style.minHeight = '1.5em';
+                            sibling.style.height = 'auto'; // Reset height
+                            sibling.style.visibility = 'visible'; // Ensure visibility
+                            
+                            // Check if it's empty (just <br>)
+                            if (sibling.innerText.trim() === '' && sibling.children.length === 0) {
+                                // Empty line, but we forced minHeight, so it should show.
+                            }
+                            
+                            lastVisibleIndex = i;
+                        } else {
+                            sibling.style.display = 'none';
+                        }
+                    });
+                    
+                    // Apply styles to last visible element
+                    const lastEl = elements[lastVisibleIndex];
+                    if (lastEl) {
+                        lastEl.style.borderBottomLeftRadius = '8px';
+                        lastEl.style.borderBottomRightRadius = '8px';
+                        lastEl.style.paddingBottom = '12px';
+                    }
+                }
+                
+                indicator.onclick = (e) => {
+                    e.stopPropagation();
+                    const isCollapsed = el.hasClass('is-collapsed');
+                    
+                    if (isCollapsed) {
+                        // Expand
+                        el.removeClass('is-collapsed');
+                        setIcon(indicator, 'chevron-down');
+                        
+                        // Show all siblings
+                        elements.forEach((sibling, i) => {
+                             sibling.style.display = '';
+                             // Reset styles
+                             sibling.style.borderBottomLeftRadius = '';
+                             sibling.style.borderBottomRightRadius = '';
+                             sibling.style.paddingBottom = '';
+                             sibling.style.minHeight = '';
+                        });
+                    } else {
+                        // Collapse
+                        el.addClass('is-collapsed');
+                        setIcon(indicator, 'chevron-right');
+                        
+                        // Hide siblings, but keep first 3 content lines visible
+                        let lastVisibleIndex = 0;
+                        elements.forEach((sibling, i) => {
+                            if (i === 0) {
+                                // Start marker line - always visible
+                                sibling.style.display = '';
+                                lastVisibleIndex = i;
+                            } else if (i >= 1 && i <= 3 && i < elements.length - 1) {
+                                // Keep content lines 1, 2, 3 visible (but not the end marker)
+                                sibling.style.display = '';
+                                sibling.style.minHeight = '1.5em'; 
+                                sibling.style.height = 'auto';
+                                sibling.style.visibility = 'visible';
+                                lastVisibleIndex = i;
+                            } else {
+                                // Others - hide
+                                sibling.style.display = 'none';
+                            }
+                        });
+                        
+                        // Apply bottom radius to the last visible element
+                        const lastEl = elements[lastVisibleIndex];
+                        if (lastEl) {
+                            lastEl.style.borderBottomLeftRadius = '8px';
+                            lastEl.style.borderBottomRightRadius = '8px';
+                            lastEl.style.paddingBottom = '12px';
+                        }
+                    }
+                };
+            }
         }
         if (index === elements.length - 1) {
             el.addClass("tinted-block-item-end");

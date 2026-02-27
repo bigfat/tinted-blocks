@@ -4,6 +4,7 @@ import { MyPluginSettings, DEFAULT_SETTINGS, TintedBlocksSettingTab } from './se
 import { createBlockTinter, processBlockTint, cleanupBlockTintObservers } from './block-tint';
 import { createInlineHighlighter, processInlineHighlight } from './inline-highlight';
 import { createTableTintPlugin, createTableMarkerHighlighter, processTableTinting } from './table-tint';
+import { createBlockFoldService } from './folding';
 
 export default class MyBlockPlugin extends Plugin {
     settings: MyPluginSettings;
@@ -16,7 +17,8 @@ export default class MyBlockPlugin extends Plugin {
             createBlockTinter(this), 
             createInlineHighlighter(this), 
             createTableTintPlugin(this), 
-            createTableMarkerHighlighter(this)
+            createTableMarkerHighlighter(this),
+            createBlockFoldService(this.settings)
         ]);
 
         // Register Markdown Post Processor (Reading View)
