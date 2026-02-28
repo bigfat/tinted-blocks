@@ -49,13 +49,13 @@ Highlight specific parts of a line, like using a highlighter pen.
 #### Syntax
 Surround your text with double colons `::`. You can specify a color code (`r`, `g`, `b`, `y`, `c`, `m`) followed by a colon.
 
-- **Default (Yellow)**: `::text::` → <mark style="background:#ffffb3">text</mark>
-- **Red**: `::r:text::` → <mark style="background:#ffb3b3">text</mark>
-- **Green**: `::g:text::` → <mark style="background:#b3ffb3">text</mark>
-- **Blue**: `::b:text::` → <mark style="background:#b3d9ff">text</mark>
-- **Yellow**: `::y:text::` → <mark style="background:#ffffb3">text</mark>
-- **Cyan**: `::c:text::` → <mark style="background:#b3ffff">text</mark>
-- **Magenta**: `::m:text::` → <mark style="background:#ffb3ff">text</mark>
+- **Default (Yellow)**: `::text::` → ![Yellow Highlight](https://placehold.co/80x20/ffffb3/000000?text=text)
+- **Red**: `::r:text::` → ![Red Highlight](https://placehold.co/80x20/ffb3b3/000000?text=text)
+- **Green**: `::g:text::` → ![Green Highlight](https://placehold.co/80x20/b3ffb3/000000?text=text)
+- **Blue**: `::b:text::` → ![Blue Highlight](https://placehold.co/80x20/b3d9ff/000000?text=text)
+- **Yellow**: `::y:text::` → ![Yellow Highlight](https://placehold.co/80x20/ffffb3/000000?text=text)
+- **Cyan**: `::c:text::` → ![Cyan Highlight](https://placehold.co/80x20/b3ffff/000000?text=text)
+- **Magenta**: `::m:text::` → ![Magenta Highlight](https://placehold.co/80x20/ffb3ff/000000?text=text)
 
 #### The "Mouse" Way
 1. Select text.
