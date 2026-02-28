@@ -89,6 +89,7 @@ When a user edits text inside a block, Obsidian re-renders that specific paragra
     - **Hiding**: By default, this span is styled with `display: inline-block; width: 0; overflow: hidden;`. This effectively removes it from the visual layout.
     - **Showing**: When the cursor enters the cell (detected via `window.getSelection()`), we add an active class that resets styles to `display: inline; width: auto; opacity: 0.67`, making it visible for editing.
     - **Risk**: Modifying the DOM managed by CodeMirror is generally risky (can confuse the editor). However, for specific localized changes inside a Table Widget (which is a "block" to CodeMirror), this approach proved to be the only robust way to achieve "zero-width hiding" in Live Preview.
+    - **Risk**: Modifying the DOM managed by CodeMirror is generally risky (can confuse the editor). However, for specific localized changes inside a Table Widget (which is a "block" to CodeMirror), this approach proved to be the only robust way to achieve "zero-width hiding" in Live Preview.
 
 ## 9. Advanced Live Preview Table Handling
 
@@ -208,3 +209,14 @@ Replicating the exact same "Header + 1 Line" collapse behavior in Reading View, 
 
 3.  **Unified Styling**:
     -   Shared CSS classes (`.tinted-block-collapse-indicator`) ensure the arrow looks and behaves identically in both views (size, position, hover effect, color).
+
+## 14. Cursor Positioning on Block Insertion
+
+### The Problem
+When inserting a new tinted block without a selection (wrapping the current line), Obsidian's default `replaceRange` behavior left the cursor at the start of the inserted text (the start marker). This forced the user to manually move the cursor down to the content line to continue typing.
+
+### The Fix
+After inserting the block markers:
+1.  Calculate the new line index of the original content (it shifted down by 1 due to the start marker).
+2.  Explicitly set the cursor to that line, preserving the original character offset (`ch`).
+3.  **Result**: The user presses the hotkey, the block appears around the current line, and the cursor stays exactly where it was relative to the text, allowing for seamless continued editing.

@@ -203,6 +203,13 @@ export default class MyBlockPlugin extends Plugin {
                     { line: cursor.line, ch: 0 },
                     { line: cursor.line + 1, ch: 0 }
                 );
+                
+                // Restore cursor position relative to the original text
+                // The original text is now on the next line (cursor.line + 1)
+                editor.setCursor({
+                    line: cursor.line + 1,
+                    ch: cursor.ch
+                });
             }
         }
     }
