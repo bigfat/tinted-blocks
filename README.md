@@ -2,6 +2,8 @@
 
 > Add a splash of color to your Obsidian notes. Highlight blocks of text elegantly, just like in Notion or Craft, but with more power.
 
+![Screenshot](screenshot/screenshot.png)
+
 **Tinted Blocks** allows you to wrap any content—paragraphs, lists, blockquotes—in a beautiful, colored container. It supports both **Live Preview** and **Reading View**, ensuring your notes look stunning in any mode.
 
 ## ✨ Features
