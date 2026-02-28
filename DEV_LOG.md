@@ -186,3 +186,25 @@ We leveraged the `@codemirror/language` `foldService` to define custom fold rang
 3.  **Collapsed State**:
     - **Arrow Color**: When collapsed (right-pointing arrow), it uses the block's tint color with 40% transparency (60% opacity) to distinctively mark it as a collapsed tinted block.
     - **Placeholder**: The `...` fold placeholder is styled to match, with a transparent background and tinted text color, creating a seamless integration.
+
+## 13. Collapsible Blocks in Reading View
+
+### The Challenge: Consistent Behavior
+Replicating the exact same "Header + 1 Line" collapse behavior in Reading View, where the DOM structure is completely different (flat list of siblings) compared to Editing View (CodeMirror lines).
+
+### Key Implementation Details
+1.  **Single-Element Blocks (The "Overflow" & "Shift" Bugs)**:
+    -   **Problem**: For blocks with only one paragraph (after header removal), setting `overflow: hidden` on the main container clipped the fold arrow (which hangs outside via negative left).
+    -   **Problem**: Content was being pushed down/shifted when collapsed.
+    -   **Solution (Wrapper Strategy)**: We dynamically wrap the content nodes into a temporary `<div class="tinted-content-wrapper">` when collapsing.
+        -   The **Wrapper** gets `overflow: hidden`, `max-height: 1.5em`, and `margin: 0`.
+        -   The **Parent** keeps `overflow: visible` so the arrow remains visible.
+        -   **Shift Fix**: Explicitly strip `margin-top` and `padding-top` from the first `<p>` inside the wrapper to prevent layout shifts caused by margin collapse.
+
+2.  **Multi-Element Blocks**:
+    -   Logic mirrors Editing View:
+        -   Hide all siblings after index 1.
+        -   Clamp index 1 (first content line) to `1.5em` height with `overflow: hidden`.
+
+3.  **Unified Styling**:
+    -   Shared CSS classes (`.tinted-block-collapse-indicator`) ensure the arrow looks and behaves identically in both views (size, position, hover effect, color).

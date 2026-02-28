@@ -364,7 +364,7 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                 
                 if (isCollapsed) {
                     // When collapsed:
-                    // Show first 3 content lines (index 1, 2, 3) + start marker line (index 0)
+                    // Show first content line (index 1) and start marker line (index 0)
                     // Hide everything else.
                     let lastVisibleIndex = 0;
                     
@@ -372,7 +372,7 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                         if (i === 0) {
                              sibling.style.display = '';
                              lastVisibleIndex = i;
-                        } else if (i >= 1 && i <= 3 && i < elements.length - 1) {
+                        } else if (i === 1 && i < elements.length - 1) {
                             sibling.style.display = '';
                              // Ensure it has height and force block display to ensure it takes vertical space
                             sibling.style.minHeight = '1.5em';
@@ -401,12 +401,26 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                 
                 indicator.onclick = (e) => {
                     e.stopPropagation();
+                    e.preventDefault(); // Stop selection/focus changes
                     const isCollapsed = el.hasClass('is-collapsed');
                     
                     if (isCollapsed) {
                         // Expand
                         el.removeClass('is-collapsed');
                         setIcon(indicator, 'chevron-down');
+                        
+                        // Handle Single Element Wrapper Unwrapping
+                        if (elements.length === 1) {
+                             const wrapper = el.querySelector('.tinted-content-wrapper') as HTMLElement;
+                             if (wrapper) {
+                                 wrapper.style.maxHeight = '';
+                                 wrapper.style.overflow = '';
+                                 wrapper.style.display = ''; // Reset to default (block/inline)
+                             }
+                             // Reset parent styles
+                             el.style.borderBottomLeftRadius = '';
+                             el.style.borderBottomRightRadius = '';
+                        }
                         
                         // Show all siblings
                         elements.forEach((sibling, i) => {
@@ -416,38 +430,101 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                              sibling.style.borderBottomRightRadius = '';
                              sibling.style.paddingBottom = '';
                              sibling.style.minHeight = '';
+                             sibling.style.maxHeight = '';
+                             sibling.style.overflow = '';
+                             
+                             // Reset line clamp props
+                             sibling.style.webkitLineClamp = '';
+                             sibling.style.webkitBoxOrient = '';
+                             sibling.style.removeProperty('-webkit-line-clamp');
                         });
                     } else {
                         // Collapse
                         el.addClass('is-collapsed');
                         setIcon(indicator, 'chevron-right');
                         
-                        // Hide siblings, but keep first 3 content lines visible
-                        let lastVisibleIndex = 0;
-                        elements.forEach((sibling, i) => {
-                            if (i === 0) {
-                                // Start marker line - always visible
-                                sibling.style.display = '';
-                                lastVisibleIndex = i;
-                            } else if (i >= 1 && i <= 3 && i < elements.length - 1) {
-                                // Keep content lines 1, 2, 3 visible (but not the end marker)
-                                sibling.style.display = '';
-                                sibling.style.minHeight = '1.5em'; 
-                                sibling.style.height = 'auto';
-                                sibling.style.visibility = 'visible';
-                                lastVisibleIndex = i;
-                            } else {
-                                // Others - hide
-                                sibling.style.display = 'none';
+                        // If it's a single element block, we must clamp it using CSS/inline styles
+                        if (elements.length === 1) {
+                             // Check for existing wrapper
+                             let wrapper = el.querySelector('.tinted-content-wrapper') as HTMLElement;
+                             
+                             if (!wrapper) {
+                                 // Create wrapper and move content
+                                 wrapper = el.createEl('div', { cls: 'tinted-content-wrapper' });
+                                 
+                                 // Move all children except indicator to wrapper
+                                 const nodesToMove: Node[] = [];
+                                 for (let i = 0; i < el.childNodes.length; i++) {
+                                     const node = el.childNodes[i];
+                                     if (node && node !== indicator && node !== wrapper) {
+                                         nodesToMove.push(node);
+                                     }
+                                 }
+                                 
+                                 nodesToMove.forEach(node => wrapper.appendChild(node));
+                                 // wrapper is automatically appended to el by createEl
+                             }
+                             
+                             // Style wrapper for clamping
+                             wrapper.style.display = 'block';
+                             wrapper.style.overflow = 'hidden';
+                             wrapper.style.maxHeight = '1.5em'; // 1 line content
+                             
+                             // Reset margins on the wrapper to avoid layout shifts
+                             wrapper.style.marginTop = '0';
+                             wrapper.style.marginBottom = '0';
+                             
+                             // Style parent
+                             el.style.borderBottomLeftRadius = '8px';
+                             el.style.borderBottomRightRadius = '8px';
+                             
+                             // Force padding on parent to maintain spacing even if content is shifted
+                             // The screenshot shows content shifted down. This might be due to margin collapse or extra padding.
+                             // Let's reset padding on wrapper.
+                             wrapper.style.padding = '0';
+                             
+                             // Reset top padding of the first paragraph inside the wrapper
+                             const firstP = wrapper.querySelector('p');
+                             if (firstP) {
+                                 firstP.style.marginTop = '0';
+                                 firstP.style.paddingTop = '0';
+                             }
+                             // el has overflow: visible !important from CSS, so arrow shows
+                        } else {
+                            // Multi-element block
+                            // Hide siblings, but keep first content line visible
+                            let lastVisibleIndex = 0;
+                            elements.forEach((sibling, i) => {
+                                if (i === 0) {
+                                    // Start marker line - always visible
+                                    sibling.style.display = '';
+                                    lastVisibleIndex = i;
+                                } else if (i === 1 && i < elements.length - 1) {
+                                    // Keep content line 1 visible (but not the end marker)
+                                    sibling.style.display = 'block'; // Reset from -webkit-box if set
+                                    sibling.style.maxHeight = '1.5em'; // Force height for content line
+                                    sibling.style.overflow = 'hidden';
+                                    sibling.style.webkitLineClamp = '';
+                                    sibling.style.webkitBoxOrient = '';
+                                    
+                                    sibling.style.minHeight = '1.5em'; 
+                                    sibling.style.height = 'auto';
+                                    sibling.style.visibility = 'visible';
+                                    
+                                    lastVisibleIndex = i;
+                                } else {
+                                    // Others - hide
+                                    sibling.style.display = 'none';
+                                }
+                            });
+                            
+                            // Apply bottom radius to the last visible element
+                            const lastEl = elements[lastVisibleIndex];
+                            if (lastEl) {
+                                lastEl.style.borderBottomLeftRadius = '8px';
+                                lastEl.style.borderBottomRightRadius = '8px';
+                                lastEl.style.paddingBottom = '12px';
                             }
-                        });
-                        
-                        // Apply bottom radius to the last visible element
-                        const lastEl = elements[lastVisibleIndex];
-                        if (lastEl) {
-                            lastEl.style.borderBottomLeftRadius = '8px';
-                            lastEl.style.borderBottomRightRadius = '8px';
-                            lastEl.style.paddingBottom = '12px';
                         }
                     }
                 };

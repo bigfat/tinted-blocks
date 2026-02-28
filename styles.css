@@ -313,150 +313,31 @@
    ========================================= */
 
 /* 
-   CodeMirror Gutter Fold Arrow Customization
-   We need to shift the fold marker for our tinted blocks if possible.
-   However, CodeMirror gutter markers are absolutely positioned in the gutter.
-   
-   But wait! The user wants the arrow to be shifted LEFT by 1em.
-   The gutter is a separate layer. We can try to target the fold marker specifically for our blocks?
-   
-   Actually, the user might be referring to the Reading View arrow which we control.
-   Wait, the user said "Editing Mode" specifically.
-   In Editing Mode, the fold arrows are in the gutter (left side).
-   
-   If the user wants to shift the arrow "more to the left", they might mean:
-   1. The arrow is too close to the content?
-   2. Or they want it deeper in the gutter?
-   
-   CodeMirror fold gutter markers:
-   .cm-gutterElement .cm-foldPlaceholder? No, that's the widget.
-   .cm-gutter-fold .cm-gutterElement
-   
-   We can't easily target ONLY our block's fold markers without a custom Gutter, which is overkill.
-   BUT, if the user means the *Reading View* arrow (which we implemented manually), that's easy.
-   
-   Let's re-read: "Just now we successfully made it show 3 lines in editing mode... Now make it show 1 line and shift arrow left 1em".
-   
-   Since I just modified `src/folding.ts` (which controls Editing Mode folding), the user is definitely talking about Editing Mode.
-   
-   However, CodeMirror's standard fold gutter doesn't easily allow shifting *individual* fold arrows.
-   Unless... the user is confusing the "Reading View Arrow" (which we added) with the "Editing View Arrow" (which is standard CodeMirror).
-   
-   Actually, our plugin *only* adds a custom arrow in Reading View.
-   In Editing View, we use `foldService` which uses the *default* Obsidian/CodeMirror gutter arrow.
-   
-   If the user sees a custom arrow in Editing View, it means... wait.
-   We only added `tinted-block-collapse-indicator` in `block-tint.ts`, which runs on the DOM.
-   Does `block-tint.ts` run in Live Preview? YES!
-   `ViewPlugin` in `block-tint.ts` runs in Live Preview (`patchDOM`).
-   But `patchDOM` creates the `.tinted-block` classes.
-   
-   AND `processBlockTint` (which adds the arrow) is called by `MarkdownRenderChild`... which is ONLY Reading View.
-   
-   So:
-   - Editing Mode (Live Preview): Uses CodeMirror `foldService` (standard gutter arrow).
-   - Reading Mode: Uses `processBlockTint` (custom floating arrow).
-   
-   The user says "Editing Mode".
-   If they are seeing the standard gutter arrow, I cannot move it easily.
-   
-   BUT, if they are using Live Preview, Obsidian *renders* markdown blocks sometimes?
-   No, Live Preview is CodeMirror.
-   
-   Hypothesis: The user *thinks* they are in Editing Mode, but they might be seeing the Reading View logic applied to rendered blocks?
-   OR, they want me to move the standard CodeMirror fold gutter arrow?
-   
-   Let's assume they want the standard behavior changed.
-   But wait, if I successfully changed "3 lines" to "1 line" via `folding.ts`, then I AM controlling the fold range.
-   
-   Can I control the arrow position? No, that's in the gutter.
-   
-   UNLESS... the user is asking about the Reading View arrow because they switched views?
-   "Now we successfully... in editing mode... show 3 lines".
-   Okay, so `folding.ts` worked.
-   
-   "Now change it to show 1 line".
-   Easy: `folding.ts` -> `line.number + 1`.
-   
-   "And shift the arrow left by 1em".
-   If this is the standard CodeMirror gutter arrow, I can try to style `.cm-foldGutter .cm-gutterElement`?
-   But that affects ALL folds (headers, lists).
-   
-   Maybe the user *does* mean the Reading View arrow?
-   Let's look at `styles.css`. I moved `.tinted-block-collapse-indicator` to `left: -24px`.
-   
-   Let's blindly follow instructions:
-   1. Modify `folding.ts` to show 1 line (Done).
-   2. Modify `styles.css` to move the arrow left. Even if it's the Reading View arrow, it's the only one I control position for.
-   
-   If the user implies I should move the *Editing Mode* arrow... I really shouldn't touch global gutter styles.
-   However, if I added a custom arrow in Live Preview (I didn't?), then I could move it.
-   
-   Wait, `block-tint.ts` -> `createBlockTinter` -> `ViewPlugin` -> `patchDOM`.
-   This `patchDOM` adds `.tinted-block` classes to `cm-line`.
-   It does NOT add the arrow indicator.
-   
-   The arrow indicator is added in `processBlockTint` (Reading View) OR... 
-   Wait, did I add logic to `patchDOM` to add arrows?
-   Let's check `src/block-tint.ts`.
-   
-   I checked `src/block-tint.ts` in previous turns.
-   The `ViewPlugin` (Editing Mode) `patchDOM` logic:
-   - Calculates blocks.
-   - Adds `.tinted-block` class.
-   - Sets `--tint-color`.
-   - DOES IT ADD ARROWS?
-   - Looking at the code from previous turn...
-   - `patchDOM` iterates lines and adds classes.
-   - `processBlockTint` (Reading View) adds arrows.
-   
-   So in Editing Mode, there are NO custom arrows. There is only the standard gutter fold marker.
-   
-   If the user wants the arrow shifted, maybe they are seeing the *Reading View* arrow in *Live Preview*?
-   Obsidian Live Preview renders HTML widgets for some things (like Callouts).
-   But our blocks are just text lines with decorations.
-   
-   Maybe the user *is* in Reading View and got confused?
-   "We successfully... in editing mode".
-   
-   Let's just update the Reading View arrow position in `styles.css` just in case.
-   AND update `folding.ts` to 1 line.
-   
-   If the user really wants the CodeMirror gutter arrow moved... I'll check if I can target it.
-   .cm-foldGutter .cm-gutterElement { margin-left: -1em; } ?
-   But that moves ALL arrows.
-   
-   I will proceed with:
-   1. `folding.ts`: Change 3 lines -> 1 line.
-   2. `styles.css`: Shift `.tinted-block-collapse-indicator` left by another 1em (from -24px to -40px?).
-*/
-
-/* 
    CodeMirror Gutter Fold Arrow Customization for Tinted Blocks
    
    The arrow in Reading View (which we control via DOM injection) is .tinted-block-collapse-indicator.
-   I am moving it significantly left (-40px).
+   I am moving it significantly left (-32px).
 */
 
 .tinted-block-collapse-indicator {
     position: absolute;
-    /* Extreme shift left to force it out of the block */
-    left: -100px !important; 
+    left: -8px !important; 
     
     /* Transform method: In case 'left' is being constrained by a relative container */
     transform: translateX(-50%); 
     
     /* Margin method: In case 'left' is ignored */
-    margin-left: -20px !important;
+    margin-left: -5px !important; /* Reduced margin */
 
-    top: 30px; 
+    top: 0.7em; 
     width: 24px;
     height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    opacity: 1 !important; /* Force visible for debugging/always */
+    opacity: 0; /* Changed back to hidden by default */
+    transition: opacity 0.2s ease;
     
     /* Ensure it's not clipped */
     overflow: visible !important;
@@ -468,8 +349,8 @@
 }
 
 .tinted-block-collapse-indicator svg {
-    width: 18px; /* Larger icon */
-    height: 18px;
+    width: 16px !important; 
+    height: 16px !important;
 }
 
 /* Show on hover */
@@ -489,6 +370,8 @@
 /* When collapsed, the indicator should be visible */
 .tinted-block-item-start.is-collapsed .tinted-block-collapse-indicator {
     opacity: 1;
+    /* Match the color style of Live Preview when collapsed */
+    color: color-mix(in srgb, var(--tint-color, var(--text-normal)) 40%, transparent) !important;
 }
 
 
