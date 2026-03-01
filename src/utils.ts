@@ -1,5 +1,4 @@
 
-import { Decoration } from '@codemirror/view';
 import { MyPluginSettings } from './settings';
 
 export function normalizeColor(raw: string, settings: MyPluginSettings): string {
@@ -70,7 +69,6 @@ export function removeTextFromStart(element: HTMLElement, textToRemove: string) 
      });
 
      if (!text && !hasContent) {
-         element.style.display = 'none';
           element.addClass('tinted-block-hidden');
           element.classList.remove('tinted-block-item'); 
           
@@ -129,11 +127,11 @@ export function removeTextFromEnd(element: HTMLElement, textToRemove: string) {
     });
 
     if (!text && !hasContent) {
-         element.style.display = 'none';
+         element.addClass('tinted-block-hidden');
          element.classList.remove('tinted-block-item');
          
          let prev = element.previousElementSibling as HTMLElement;
-         while (prev && prev.style.display === 'none') {
+         while (prev && (prev.style.display === 'none' || prev.classList.contains('tinted-block-hidden'))) {
              prev = prev.previousElementSibling as HTMLElement;
          }
          

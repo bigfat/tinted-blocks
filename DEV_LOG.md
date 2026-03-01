@@ -220,3 +220,16 @@ After inserting the block markers:
 1.  Calculate the new line index of the original content (it shifted down by 1 due to the start marker).
 2.  Explicitly set the cursor to that line, preserving the original character offset (`ch`).
 3.  **Result**: The user presses the hotkey, the block appears around the current line, and the cursor stays exactly where it was relative to the text, allowing for seamless continued editing.
+
+## 15. Obsidian Plugin Review Compliance
+
+### Code Quality & Standards
+We refactored the codebase to adhere to Obsidian's official plugin guidelines:
+-   **No Direct Style Manipulation**: Replaced direct TS style assignments (e.g., `el.style.display = 'none'`) with CSS classes (`.tinted-block-hidden`, `.tinted-block-clamped`).
+-   **CSS file usage**: Moved all structural styles to `styles.css`.
+-   **Settings UI**: Standardized the Settings tab to use `new Setting().setHeading()` and removed custom HTML headers.
+-   **Type Safety**: Removed `any` types in favor of Obsidian API types (`TextComponent`, `ColorComponent`).
+-   **Hotkeys**: Removed default hotkey assignments in `main.ts` to respect user preferences and avoid conflicts.
+-   **Cleanup**: Removed unused variables and imports.
+
+This ensures the plugin is maintainable, performant, and consistent with the Obsidian ecosystem.

@@ -41,8 +41,7 @@ export default class MyBlockPlugin extends Plugin {
                     this.toggleBlockTint(view.editor);
                 }
                 return true;
-            },
-            hotkeys: [{ modifiers: ["Mod", "Shift"], key: "'" }]
+            }
         });
 
         this.addCommand({
@@ -56,8 +55,7 @@ export default class MyBlockPlugin extends Plugin {
                     this.toggleInlineHighlight(view.editor);
                 }
                 return true;
-            },
-            hotkeys: [{ modifiers: ["Mod", "Shift"], key: "b" }]
+            }
         });
 
         // Add Context Menu Item
@@ -278,7 +276,6 @@ export default class MyBlockPlugin extends Plugin {
                     // 2. Middle lines: full line
                     // 3. Last line: from 0 to end.ch
                     
-                    const doc = editor.getDoc();
                     let newText = "";
                     
                     for (let i = start.line; i <= end.line; i++) {

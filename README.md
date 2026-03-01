@@ -41,6 +41,7 @@ It supports **Markdown** formatting.
 #### The "Mouse" Way
 1. Select text.
 2. Right-click and choose **Tint block**.
+3. Or assign a custom hotkey in **Settings -> Hotkeys**. For example, you can use `Cmd/Ctrl + Shift + '` to match the behavior in Craft.
 
 ### 2. Inline Highlighting
 
@@ -60,6 +61,7 @@ Surround your text with double colons `::`. You can specify a color code (`r`, `
 #### The "Mouse" Way
 1. Select text.
 2. Right-click and choose **Highlight text**. (Defaults to yellow).
+3. Or assign a custom hotkey in **Settings -> Hotkeys**. For example, you can use `Cmd/Ctrl + Shift + B` to match the behavior in Craft.
 
 ### 3. Table Cell Tinting (Alpha)
 

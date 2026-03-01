@@ -1,5 +1,5 @@
 
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, TextComponent, ColorComponent } from "obsidian";
 import MyPlugin from "./main";
 
 export interface MyPluginSettings {
@@ -52,7 +52,9 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		
 		// --- General / Info ---
-		containerEl.createEl('h2', {text: 'Tinted Blocks Settings'});
+        new Setting(containerEl)
+            .setName('Tinted blocks settings')
+            .setHeading();
 
 		const helpDesc = document.createDocumentFragment();
 		helpDesc.append('You can assign hotkeys to "Tint block" and "Highlight text" commands in ');
@@ -72,7 +74,7 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         };
 		helpDesc.append('.');
         helpDesc.append(document.createElement('br'));
-        helpDesc.append("Default hotkeys: Tint Block (Cmd/Ctrl+Shift+'), Highlight Text (Cmd/Ctrl+Shift+B).");
+        helpDesc.append("You can manually assign hotkeys to match Craft: Tint block (Cmd/Ctrl+Shift+'), Highlight text (Cmd/Ctrl+Shift+B).");
 
 		new Setting(containerEl)
 			.setName('Hotkeys')
@@ -91,15 +93,16 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
     addBlockTintingSection(containerEl: HTMLElement) {
         // Section Header with Toggle
         const headerDiv = containerEl.createDiv({ cls: 'tinted-blocks-setting-header' });
-        headerDiv.style.display = 'flex';
-        headerDiv.style.alignItems = 'center';
-        headerDiv.style.justifyContent = 'space-between';
-        headerDiv.style.marginTop = '20px';
-        headerDiv.style.marginBottom = '10px';
 
-        const h3 = headerDiv.createEl('h3', { text: 'Block Tinting' });
-        h3.style.margin = '0';
-        h3.style.fontSize = '1.2em';
+        headerDiv.createEl('h3', { text: 'Block tinting' });
+
+        // Container for detailed settings
+        const detailsDiv = containerEl.createDiv();
+        const toggleDetails = (show: boolean) => {
+            if (show) detailsDiv.style.display = 'block';
+            else detailsDiv.style.display = 'none';
+        };
+        toggleDetails(this.plugin.settings.enableBlockTint);
 
         // Toggle Switch directly in header
         const toggleSetting = new Setting(headerDiv)
@@ -108,48 +111,27 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.enableBlockTint = value;
                     await this.plugin.saveSettings();
-                    // Toggle visibility of details
-                    if (value) {
-                        detailsDiv.style.display = 'block';
-                    } else {
-                        detailsDiv.style.display = 'none';
-                    }
+                    toggleDetails(value);
                 }));
         // Remove default padding/border from setting to fit in header
-        toggleSetting.settingEl.style.border = 'none';
-        toggleSetting.settingEl.style.padding = '0';
+        toggleSetting.settingEl.addClass('tinted-blocks-toggle');
         
-        // Container for detailed settings
-        const detailsDiv = containerEl.createDiv();
-        if (!this.plugin.settings.enableBlockTint) {
-            detailsDiv.style.display = 'none';
-        }
-
 		const blockUsageDesc = document.createDocumentFragment();
         blockUsageDesc.append('Wrap content with markers. Syntax:');
-        const codeBlock = blockUsageDesc.createEl('div');
-        codeBlock.style.backgroundColor = 'var(--background-primary-alt)';
-        codeBlock.style.padding = '8px';
-        codeBlock.style.borderRadius = '4px';
-        codeBlock.style.marginTop = '8px';
-        codeBlock.style.fontFamily = 'var(--font-monospace)';
-        codeBlock.style.whiteSpace = 'pre';
+        const codeBlock = blockUsageDesc.createEl('div', { cls: 'tinted-blocks-code-block' });
         codeBlock.setText(`${this.plugin.settings.blockStartMarker}color\nYour text here...\n${this.plugin.settings.blockEndMarker}`);
 
-		const blockUsageSetting = new Setting(detailsDiv)
-			.setName('How To Use')
+		new Setting(detailsDiv)
+			.setName('How to use')
 			.setDesc(blockUsageDesc);
         
         // Start/End Marker Logic
-        let startMarkerText: any;
-        let endMarkerText: any;
         let endMarkerSetting: Setting;
 
 		new Setting(detailsDiv)
-			.setName('Block Start Marker')
+			.setName('Block start marker')
 			.setDesc('The marker that indicates the start of a tinted block.')
 			.addText(text => {
-                startMarkerText = text;
                 text
 				.setPlaceholder('/--')
 				.setValue(this.plugin.settings.blockStartMarker)
@@ -173,10 +155,9 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
             });
 
 		endMarkerSetting = new Setting(detailsDiv)
-			.setName('Block End Marker')
+			.setName('Block end marker')
 			.setDesc('The marker that indicates the end of a tinted block.')
 			.addText(text => {
-                endMarkerText = text;
                 text
 				.setPlaceholder('--/')
 				.setValue(this.plugin.settings.blockEndMarker)
@@ -203,9 +184,7 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
             if (start === end && start !== "") {
                 const desc = document.createDocumentFragment();
                 desc.createEl('span', {text: 'The marker that indicates the end of a tinted block. '});
-                const errorEl = desc.createEl('span', {text: 'Error: Start and End markers cannot be the same!', cls: 'text-error'});
-                errorEl.style.color = 'var(--text-error)';
-                errorEl.style.fontWeight = 'bold';
+                desc.createEl('span', {text: 'Error: Start and End markers cannot be the same!', cls: 'tinted-blocks-error'});
                 endMarkerSetting.setDesc(desc);
             } else {
                 endMarkerSetting.setDesc('The marker that indicates the end of a tinted block.');
@@ -216,11 +195,11 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         
         // Color Preview Container
         const colorSetting = new Setting(detailsDiv)
-			.setName('Default Block Color')
+			.setName('Default block color')
 			.setDesc('The color used when no color is specified or the specified color is invalid.');
 
-        let textComponent: any;
-        let colorComponent: any;
+        let textComponent: TextComponent | undefined;
+        let colorComponent: ColorComponent | undefined;
 
         colorSetting.addText(text => {
             textComponent = text;
@@ -262,13 +241,7 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
                 });
         });
         
-        const previewEl = detailsDiv.createDiv();
-        previewEl.style.marginTop = '10px';
-        previewEl.style.marginBottom = '20px';
-        previewEl.style.paddingTop = '12px';
-        previewEl.style.paddingBottom = '12px';
-        previewEl.style.borderRadius = '8px';
-        previewEl.addClass('tinted-block');
+        const previewEl = detailsDiv.createDiv({ cls: 'tinted-blocks-preview tinted-block' });
         previewEl.style.setProperty('--tint-color', this.plugin.settings.defaultColor);
         previewEl.createEl('div', { text: 'This is a preview of the default color block.', cls: '' });
         previewEl.createEl('div', { text: 'It shows how text and background look.', cls: '' });
@@ -281,15 +254,16 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
     addInlineHighlightingSection(containerEl: HTMLElement) {
         // Section Header with Toggle
         const headerDiv = containerEl.createDiv({ cls: 'tinted-blocks-setting-header' });
-        headerDiv.style.display = 'flex';
-        headerDiv.style.alignItems = 'center';
-        headerDiv.style.justifyContent = 'space-between';
-        headerDiv.style.marginTop = '20px';
-        headerDiv.style.marginBottom = '10px';
 
-        const h3 = headerDiv.createEl('h3', { text: 'Inline Highlighting' });
-        h3.style.margin = '0';
-        h3.style.fontSize = '1.2em';
+        headerDiv.createEl('h3', { text: 'Inline highlighting' });
+
+        // Details Container
+        const detailsDiv = containerEl.createDiv();
+        const toggleDetails = (show: boolean) => {
+            if (show) detailsDiv.style.display = 'block';
+            else detailsDiv.style.display = 'none';
+        };
+        toggleDetails(this.plugin.settings.enableInlineHighlight);
 
         // Toggle Switch
         const toggleSetting = new Setting(headerDiv)
@@ -298,20 +272,9 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.enableInlineHighlight = value;
                     await this.plugin.saveSettings();
-                    if (value) {
-                        detailsDiv.style.display = 'block';
-                    } else {
-                        detailsDiv.style.display = 'none';
-                    }
+                    toggleDetails(value);
                 }));
-        toggleSetting.settingEl.style.border = 'none';
-        toggleSetting.settingEl.style.padding = '0';
-
-        // Details Container
-        const detailsDiv = containerEl.createDiv();
-        if (!this.plugin.settings.enableInlineHighlight) {
-            detailsDiv.style.display = 'none';
-        }
+        toggleSetting.settingEl.addClass('tinted-blocks-toggle');
 
         const inlineUsageDesc = document.createDocumentFragment();
         inlineUsageDesc.append('Highlight text inline. Syntax: ');
@@ -319,12 +282,12 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         inlineUsageDesc.append(' or ');
         inlineUsageDesc.createEl('code', {text: `${this.plugin.settings.inlineMarker}red:text${this.plugin.settings.inlineMarker}`});
 
-		const inlineUsageSetting = new Setting(detailsDiv)
-			.setName('How To Use')
+		new Setting(detailsDiv)
+			.setName('How to use')
 			.setDesc(inlineUsageDesc);
 
 		new Setting(detailsDiv)
-			.setName('Inline Marker')
+			.setName('Inline marker')
 			.setDesc('The marker used for inline highlighting (e.g., ::text::).')
 			.addText(text => text
 				.setPlaceholder('::')
@@ -338,15 +301,16 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
     addTableTintingSection(containerEl: HTMLElement) {
         // Section Header with Toggle
         const headerDiv = containerEl.createDiv({ cls: 'tinted-blocks-setting-header' });
-        headerDiv.style.display = 'flex';
-        headerDiv.style.alignItems = 'center';
-        headerDiv.style.justifyContent = 'space-between';
-        headerDiv.style.marginTop = '20px';
-        headerDiv.style.marginBottom = '10px';
 
-        const h3 = headerDiv.createEl('h3', { text: 'Table Cell Tinting' });
-        h3.style.margin = '0';
-        h3.style.fontSize = '1.2em';
+        headerDiv.createEl('h3', { text: 'Table cell tinting' });
+
+        // Details Container
+        const detailsDiv = containerEl.createDiv();
+        const toggleDetails = (show: boolean) => {
+            if (show) detailsDiv.style.display = 'block';
+            else detailsDiv.style.display = 'none';
+        };
+        toggleDetails(this.plugin.settings.enableTableTint);
 
         // Toggle Switch
         const toggleSetting = new Setting(headerDiv)
@@ -355,33 +319,18 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.enableTableTint = value;
                     await this.plugin.saveSettings();
-                    if (value) {
-                        detailsDiv.style.display = 'block';
-                    } else {
-                        detailsDiv.style.display = 'none';
-                    }
+                    toggleDetails(value);
                 }));
-        toggleSetting.settingEl.style.border = 'none';
-        toggleSetting.settingEl.style.padding = '0';
-
-        // Details Container
-        const detailsDiv = containerEl.createDiv();
-        if (!this.plugin.settings.enableTableTint) {
-            detailsDiv.style.display = 'none';
-        }
+        toggleSetting.settingEl.addClass('tinted-blocks-toggle');
 
         const tableDesc = document.createDocumentFragment();
         tableDesc.append('Add color to table cells. Syntax: ');
         tableDesc.createEl('code', {text: '| :r: Content |'});
         tableDesc.append(document.createElement('br'));
-        const alphaWarning = tableDesc.createEl('span', {text: '⚠️ Alpha Feature: This feature relies on internal Obsidian DOM structures and may break with future updates.', cls: 'text-error'});
-        alphaWarning.style.color = 'var(--text-warning)';
-        alphaWarning.style.fontSize = '0.9em';
-        alphaWarning.style.display = 'block';
-        alphaWarning.style.marginTop = '5px';
+        tableDesc.createEl('span', {text: '⚠️ Alpha Feature: This feature relies on internal Obsidian DOM structures and may break with future updates.', cls: 'tinted-blocks-warning'});
 
-		const tableUsageSetting = new Setting(detailsDiv)
-			.setName('How To Use')
+		new Setting(detailsDiv)
+			.setName('How to use')
 			.setDesc(tableDesc);
     }
 }

@@ -662,3 +662,97 @@
     font-size: 100% !important;
     opacity: 1 !important;
 }
+
+/* =========================================
+   Settings Page Styles
+   ========================================= */
+
+.tinted-blocks-setting-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.tinted-blocks-setting-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+.tinted-blocks-toggle {
+    border: none !important;
+    padding: 0 !important;
+}
+
+.tinted-blocks-code-block {
+    background-color: var(--background-primary-alt);
+    padding: 8px;
+    border-radius: 4px;
+    margin-top: 8px;
+    font-family: var(--font-monospace);
+    white-space: pre;
+}
+
+.tinted-blocks-preview {
+    margin-top: 10px;
+    margin-bottom: 20px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-radius: 8px;
+}
+
+.tinted-blocks-error {
+    color: var(--text-error);
+    font-weight: bold;
+}
+
+.tinted-blocks-warning {
+    color: var(--text-warning);
+    font-size: 0.9em;
+    display: block;
+    margin-top: 5px;
+}
+
+/* =========================================
+   Reading View Collapse Helpers
+   ========================================= */
+
+.tinted-content-wrapper {
+    /* No default styles, just a container */
+}
+
+.tinted-content-wrapper.is-clamped {
+    display: block !important;
+    overflow: hidden !important;
+    max-height: 1.5em !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.tinted-content-wrapper.is-clamped > *:first-child {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Clamped state for multi-element content line */
+.tinted-block-clamped {
+    display: block !important;
+    max-height: 1.5em !important;
+    overflow: hidden !important;
+    min-height: 1.5em !important;
+    height: auto !important;
+    visibility: visible !important;
+}
+
+/* Hidden state for siblings */
+.tinted-block-hidden {
+    display: none !important;
+}
+
+/* Bottom rounded corners for collapsed state */
+.tinted-block-collapsed-bottom {
+    border-bottom-left-radius: 8px !important;
+    border-bottom-right-radius: 8px !important;
+    padding-bottom: 12px !important;
+}

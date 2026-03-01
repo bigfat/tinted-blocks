@@ -1,3 +1,4 @@
+
 import { setIcon } from 'obsidian';
 import { RangeSetBuilder, StateField, EditorState, Prec } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
@@ -251,6 +252,7 @@ function wrapMarkedBlocks(container: HTMLElement, settings: MyPluginSettings) {
         // CLEANUP STEP: Remove all existing styling classes from this container's children.
         children.forEach(child => {
             child.classList.remove('tinted-block-item', 'tinted-block-item-start', 'tinted-block-item-end');
+            child.classList.remove('tinted-block-clamped', 'tinted-block-hidden', 'tinted-block-collapsed-bottom');
             child.style.removeProperty('--tint-color');
             // Remove indicator if present to ensure we re-bind with correct elements
             const indicator = child.querySelector('.tinted-block-collapse-indicator');
@@ -370,32 +372,25 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                     
                     elements.forEach((sibling, i) => {
                         if (i === 0) {
-                             sibling.style.display = '';
+                             // Start marker line - always visible
+                             sibling.removeClass('tinted-block-hidden');
                              lastVisibleIndex = i;
                         } else if (i === 1 && i < elements.length - 1) {
-                            sibling.style.display = '';
-                             // Ensure it has height and force block display to ensure it takes vertical space
-                            sibling.style.minHeight = '1.5em';
-                            sibling.style.height = 'auto'; // Reset height
-                            sibling.style.visibility = 'visible'; // Ensure visibility
-                            
-                            // Check if it's empty (just <br>)
-                            if (sibling.innerText.trim() === '' && sibling.children.length === 0) {
-                                // Empty line, but we forced minHeight, so it should show.
-                            }
+                            // Keep content line 1 visible (but not the end marker)
+                            sibling.removeClass('tinted-block-hidden');
+                            sibling.addClass('tinted-block-clamped');
                             
                             lastVisibleIndex = i;
                         } else {
-                            sibling.style.display = 'none';
+                            // Others - hide
+                            sibling.addClass('tinted-block-hidden');
                         }
                     });
                     
-                    // Apply styles to last visible element
+                    // Apply bottom radius to the last visible element
                     const lastEl = elements[lastVisibleIndex];
                     if (lastEl) {
-                        lastEl.style.borderBottomLeftRadius = '8px';
-                        lastEl.style.borderBottomRightRadius = '8px';
-                        lastEl.style.paddingBottom = '12px';
+                        lastEl.addClass('tinted-block-collapsed-bottom');
                     }
                 }
                 
@@ -413,30 +408,17 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                         if (elements.length === 1) {
                              const wrapper = el.querySelector('.tinted-content-wrapper') as HTMLElement;
                              if (wrapper) {
-                                 wrapper.style.maxHeight = '';
-                                 wrapper.style.overflow = '';
-                                 wrapper.style.display = ''; // Reset to default (block/inline)
+                                 wrapper.removeClass('is-clamped');
                              }
                              // Reset parent styles
-                             el.style.borderBottomLeftRadius = '';
-                             el.style.borderBottomRightRadius = '';
+                             el.removeClass('tinted-block-collapsed-bottom');
                         }
                         
                         // Show all siblings
                         elements.forEach((sibling, i) => {
-                             sibling.style.display = '';
-                             // Reset styles
-                             sibling.style.borderBottomLeftRadius = '';
-                             sibling.style.borderBottomRightRadius = '';
-                             sibling.style.paddingBottom = '';
-                             sibling.style.minHeight = '';
-                             sibling.style.maxHeight = '';
-                             sibling.style.overflow = '';
-                             
-                             // Reset line clamp props
-                             sibling.style.webkitLineClamp = '';
-                             sibling.style.webkitBoxOrient = '';
-                             sibling.style.removeProperty('-webkit-line-clamp');
+                             sibling.removeClass('tinted-block-hidden');
+                             sibling.removeClass('tinted-block-collapsed-bottom');
+                             sibling.removeClass('tinted-block-clamped');
                         });
                     } else {
                         // Collapse
@@ -466,30 +448,10 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                              }
                              
                              // Style wrapper for clamping
-                             wrapper.style.display = 'block';
-                             wrapper.style.overflow = 'hidden';
-                             wrapper.style.maxHeight = '1.5em'; // 1 line content
-                             
-                             // Reset margins on the wrapper to avoid layout shifts
-                             wrapper.style.marginTop = '0';
-                             wrapper.style.marginBottom = '0';
+                             wrapper.addClass('is-clamped');
                              
                              // Style parent
-                             el.style.borderBottomLeftRadius = '8px';
-                             el.style.borderBottomRightRadius = '8px';
-                             
-                             // Force padding on parent to maintain spacing even if content is shifted
-                             // The screenshot shows content shifted down. This might be due to margin collapse or extra padding.
-                             // Let's reset padding on wrapper.
-                             wrapper.style.padding = '0';
-                             
-                             // Reset top padding of the first paragraph inside the wrapper
-                             const firstP = wrapper.querySelector('p');
-                             if (firstP) {
-                                 firstP.style.marginTop = '0';
-                                 firstP.style.paddingTop = '0';
-                             }
-                             // el has overflow: visible !important from CSS, so arrow shows
+                             el.addClass('tinted-block-collapsed-bottom');
                         } else {
                             // Multi-element block
                             // Hide siblings, but keep first content line visible
@@ -497,33 +459,24 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                             elements.forEach((sibling, i) => {
                                 if (i === 0) {
                                     // Start marker line - always visible
-                                    sibling.style.display = '';
+                                    sibling.removeClass('tinted-block-hidden');
                                     lastVisibleIndex = i;
                                 } else if (i === 1 && i < elements.length - 1) {
                                     // Keep content line 1 visible (but not the end marker)
-                                    sibling.style.display = 'block'; // Reset from -webkit-box if set
-                                    sibling.style.maxHeight = '1.5em'; // Force height for content line
-                                    sibling.style.overflow = 'hidden';
-                                    sibling.style.webkitLineClamp = '';
-                                    sibling.style.webkitBoxOrient = '';
-                                    
-                                    sibling.style.minHeight = '1.5em'; 
-                                    sibling.style.height = 'auto';
-                                    sibling.style.visibility = 'visible';
+                                    sibling.removeClass('tinted-block-hidden');
+                                    sibling.addClass('tinted-block-clamped');
                                     
                                     lastVisibleIndex = i;
                                 } else {
                                     // Others - hide
-                                    sibling.style.display = 'none';
+                                    sibling.addClass('tinted-block-hidden');
                                 }
                             });
                             
                             // Apply bottom radius to the last visible element
                             const lastEl = elements[lastVisibleIndex];
                             if (lastEl) {
-                                lastEl.style.borderBottomLeftRadius = '8px';
-                                lastEl.style.borderBottomRightRadius = '8px';
-                                lastEl.style.paddingBottom = '12px';
+                                lastEl.addClass('tinted-block-collapsed-bottom');
                             }
                         }
                     }

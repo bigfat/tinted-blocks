@@ -1,7 +1,7 @@
 {
 	"id": "tinted-blocks",
 	"name": "Tinted Blocks",
-	"version": "0.6.0",
+	"version": "0.6.1",
 	"minAppVersion": "0.15.0",
 	"description": "Highlight blocks with color. Inspired by Notion and Craft.",
 	"author": "bigfat",
