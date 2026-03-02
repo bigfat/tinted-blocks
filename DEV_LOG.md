@@ -258,3 +258,17 @@ To reproduce and fix the 140+ linting errors reported by the Obsidian review tea
 
 ### Result
 `npm run lint` now returns **0 errors**, confirming the codebase is clean and compliant with Obsidian's strict standards.
+
+## 17. Reading View Collapsible Blocks Polish
+
+### Issue 1: Accumulating Padding on Toggle
+- **Problem**: In Reading View, collapsing and then expanding a block would cause the vertical padding to increase or shift.
+- **Cause**: The `performWrap` logic (for single-line clamping) was moving content into a `.tinted-content-wrapper` div but **not unwrapping it** when expanding. This created nested DOM structures (`Parent > Wrapper > Content`) where the inner wrapper prevented margin collapse or introduced extra spacing.
+- **Fix**: Implemented a proper **Unwrap** routine. When expanding, we move all children from the wrapper back to the parent container (restoring original DOM order) before removing the wrapper. This ensures the DOM state resets completely after every toggle.
+
+### Issue 2: Complex Block Collapse Consistency
+- **Problem**: Blocks containing lists, blockquotes, or multiple paragraphs would sometimes show partial content (like the top half of a list) when collapsed.
+- **Cause**: The logic attempted to "clamp" the first content line (e.g., `max-height: 1.5em`), but this behaves unpredictably with complex block-level elements like `<ul>` or `<blockquote>`.
+- **Fix**: Simplified the collapse strategy for multi-element blocks.
+    - **Strategy**: Instead of clamping, we now **hide all siblings** (`.tinted-block-hidden`) except for the **Start Marker Line** (which contains the header/title).
+    - **Result**: Collapsing a block now cleanly shows *only* the header line, regardless of what complex content follows. This provides a consistent, clean UI that matches user expectations for a "folded" state.

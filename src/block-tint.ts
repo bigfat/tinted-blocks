@@ -375,15 +375,10 @@ function performWrap(_container: HTMLElement, elements: HTMLElement[], color: st
                              // Start marker line - always visible
                              sibling.removeClass('tinted-block-hidden');
                              lastVisibleIndex = i;
-                        } else if (i === 1 && i < elements.length - 1) {
-                            // Keep content line 1 visible (but not the end marker)
-                            sibling.removeClass('tinted-block-hidden');
-                            sibling.addClass('tinted-block-clamped');
-                            
-                            lastVisibleIndex = i;
                         } else {
                             // Others - hide
                             sibling.addClass('tinted-block-hidden');
+                            sibling.removeClass('tinted-block-clamped');
                         }
                     });
                     
@@ -408,7 +403,12 @@ function performWrap(_container: HTMLElement, elements: HTMLElement[], color: st
                         if (elements.length === 1) {
                              const wrapper = el.querySelector('.tinted-content-wrapper') as HTMLElement;
                              if (wrapper) {
-                                 wrapper.removeClass('is-clamped');
+                                 // Unwrap: Move content back to parent
+                                 while (wrapper.firstChild) {
+                                     // Insert before indicator to restore original order (Content -> Indicator)
+                                     el.insertBefore(wrapper.firstChild, indicator);
+                                 }
+                                 wrapper.remove();
                              }
                              // Reset parent styles
                              el.removeClass('tinted-block-collapsed-bottom');
@@ -454,22 +454,17 @@ function performWrap(_container: HTMLElement, elements: HTMLElement[], color: st
                              el.addClass('tinted-block-collapsed-bottom');
                         } else {
                             // Multi-element block
-                            // Hide siblings, but keep first content line visible
+                            // Hide all siblings except the first one (header)
                             let lastVisibleIndex = 0;
                             elements.forEach((sibling, i) => {
                                 if (i === 0) {
                                     // Start marker line - always visible
                                     sibling.removeClass('tinted-block-hidden');
                                     lastVisibleIndex = i;
-                                } else if (i === 1 && i < elements.length - 1) {
-                                    // Keep content line 1 visible (but not the end marker)
-                                    sibling.removeClass('tinted-block-hidden');
-                                    sibling.addClass('tinted-block-clamped');
-                                    
-                                    lastVisibleIndex = i;
                                 } else {
                                     // Others - hide
                                     sibling.addClass('tinted-block-hidden');
+                                    sibling.removeClass('tinted-block-clamped');
                                 }
                             });
                             
