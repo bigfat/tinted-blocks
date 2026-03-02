@@ -1,17 +1,17 @@
 
 import { setIcon } from 'obsidian';
-import { RangeSetBuilder, StateField, EditorState, Prec } from '@codemirror/state';
+import { RangeSetBuilder, StateField, EditorState } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
-import { MyPluginSettings } from './settings';
+import { TintedBlocksSettings } from './settings';
 import { normalizeColor, removeTextFromStart, removeTextFromEnd } from './utils';
 
 // Interface to avoid circular dependency
 interface IPlugin {
-    settings: MyPluginSettings;
+    settings: TintedBlocksSettings;
 }
 
 // ============================================================
-// 1. 编辑模式 (Live Preview) - 块级高亮
+// 1. Live Preview - Block Tinting
 // ============================================================
 
 const bgDecoration = (color: string, type: 'start' | 'mid' | 'end', active: boolean) => {
@@ -66,7 +66,7 @@ function buildBlockDecorations(state: EditorState, plugin: IPlugin): DecorationS
 
     const lineActions = new Map<number, {type: 'start'|'mid'|'end', color: string, active: boolean}>();
     
-    for (let block of blocks) {
+    for (const block of blocks) {
         const startLineObj = doc.line(block.start);
         const endLineObj = doc.line(block.end);
         
@@ -181,7 +181,7 @@ export const createBlockTinter = (plugin: IPlugin) => [
                                 lineEl.style.removeProperty('--tint-color');
                             }
                         }
-                    } catch (e) {
+                    } catch {
                         // Ignore errors if DOM pos is invalid (e.g. detached)
                     }
                 });
@@ -198,13 +198,13 @@ export const createBlockTinter = (plugin: IPlugin) => [
 // Use MutationObserver instead of timeout for reliable detection
 const activeObservers = new Map<HTMLElement, MutationObserver>();
 
-function queueWrapping(element: HTMLElement, settings: MyPluginSettings) {
+function queueWrapping(element: HTMLElement, settings: TintedBlocksSettings) {
     if (!element.parentElement) {
         // Wait for attachment
         let attempts = 0;
         const checkParent = () => {
             if (element.parentElement) {
-                setupObserver(element.parentElement, settings);
+                setupObserver(element.parentElement!, settings);
             } else if (attempts < 10) {
                 attempts++;
                 window.setTimeout(checkParent, 20);
@@ -216,7 +216,7 @@ function queueWrapping(element: HTMLElement, settings: MyPluginSettings) {
     }
 }
 
-function setupObserver(container: HTMLElement, settings: MyPluginSettings) {
+function setupObserver(container: HTMLElement, settings: TintedBlocksSettings) {
     if (activeObservers.has(container)) return;
 
     // Debounce the actual processing
@@ -226,7 +226,7 @@ function setupObserver(container: HTMLElement, settings: MyPluginSettings) {
         wrapMarkedBlocks(container, settings);
     };
 
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
         // Disconnect immediately to prevent loops
         observer.disconnect();
         
@@ -242,7 +242,7 @@ function setupObserver(container: HTMLElement, settings: MyPluginSettings) {
     timeout = window.setTimeout(process, 100);
 }
 
-function wrapMarkedBlocks(container: HTMLElement, settings: MyPluginSettings) {
+function wrapMarkedBlocks(container: HTMLElement, settings: TintedBlocksSettings) {
     const observer = activeObservers.get(container);
     if (observer) observer.disconnect();
 
@@ -345,7 +345,7 @@ function wrapMarkedBlocks(container: HTMLElement, settings: MyPluginSettings) {
     }
 }
 
-function performWrap(container: HTMLElement, elements: HTMLElement[], color: string, startMarker: string, endMarker: string) {
+function performWrap(_container: HTMLElement, elements: HTMLElement[], color: string, startMarker: string, endMarker: string) {
     if (elements.length === 0) return;
     
     elements.forEach((el, index) => {
@@ -415,7 +415,7 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
                         }
                         
                         // Show all siblings
-                        elements.forEach((sibling, i) => {
+                        elements.forEach((sibling) => {
                              sibling.removeClass('tinted-block-hidden');
                              sibling.removeClass('tinted-block-collapsed-bottom');
                              sibling.removeClass('tinted-block-clamped');
@@ -499,7 +499,7 @@ function performWrap(container: HTMLElement, elements: HTMLElement[], color: str
     }
 }
 
-export function processBlockTint(element: HTMLElement, settings: MyPluginSettings) {
+export function processBlockTint(element: HTMLElement, settings: TintedBlocksSettings) {
     const startMarker = settings.blockStartMarker;
     const endMarker = settings.blockEndMarker;
     const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

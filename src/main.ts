@@ -1,13 +1,13 @@
 
 import { Plugin, MarkdownPostProcessorContext, Editor, Menu, MarkdownView } from 'obsidian';
-import { MyPluginSettings, DEFAULT_SETTINGS, TintedBlocksSettingTab } from './settings';
+import { TintedBlocksSettings, DEFAULT_SETTINGS, TintedBlocksSettingTab } from './settings';
 import { createBlockTinter, processBlockTint, cleanupBlockTintObservers } from './block-tint';
 import { createInlineHighlighter, processInlineHighlight } from './inline-highlight';
 import { createTableTintPlugin, createTableMarkerHighlighter, processTableTinting } from './table-tint';
 import { createBlockFoldService } from './folding';
 
-export default class MyBlockPlugin extends Plugin {
-    settings: MyPluginSettings;
+export default class TintedBlocksPlugin extends Plugin {
+    settings: TintedBlocksSettings;
 
     async onload() {
         await this.loadSettings();
@@ -22,8 +22,8 @@ export default class MyBlockPlugin extends Plugin {
         ]);
 
         // Register Markdown Post Processor (Reading View)
-        this.registerMarkdownPostProcessor((element, context) => {
-            this.processPreviewMode(element, context);
+        this.registerMarkdownPostProcessor((element, _context) => {
+            this.processPreviewMode(element, _context);
         });
 
         // Add Settings Tab
@@ -60,7 +60,7 @@ export default class MyBlockPlugin extends Plugin {
 
         // Add Context Menu Item
         this.registerEvent(
-            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, _view: MarkdownView) => {
                 if (this.settings.enableBlockTint) {
                     menu.addItem((item) => {
                         item
@@ -110,9 +110,9 @@ export default class MyBlockPlugin extends Plugin {
         this.app.workspace.iterateAllLeaves(leaf => {
             if (leaf.view instanceof MarkdownView) {
                  const editor = leaf.view.editor;
-                 // @ts-ignore
+                 // @ts-expect-error Accessing internal CodeMirror instance
                  if (editor && editor.cm) {
-                     // @ts-ignore
+                     // @ts-expect-error Accessing internal CodeMirror instance
                      const cm = editor.cm;
                      // Trigger update
                      cm.dispatch({});
@@ -252,14 +252,6 @@ export default class MyBlockPlugin extends Plugin {
                     editor.replaceRange('', { line: start.line, ch: start.ch - marker.length }, start);
                     
                     // Restore selection? 
-                    // The offsets shifted.
-                    // Start shifted back by marker.length.
-                    // End shifted back by marker.length (because start shifted) AND removed end marker (another marker.length) -> Total 2*marker.length?
-                    // Wait.
-                    // Start position: we removed `marker` BEFORE start. So new start is start.ch - marker.length.
-                    // End position: we removed `marker` AFTER end. AND we removed `marker` BEFORE start (which is before end).
-                    // So new end is end.ch - marker.length.
-                    
                     editor.setSelection(
                         { line: start.line, ch: start.ch - marker.length },
                         { line: end.line, ch: end.ch - marker.length }
@@ -272,9 +264,6 @@ export default class MyBlockPlugin extends Plugin {
                 
                 if (start.line !== end.line) {
                     // Multi-line selection: Wrap segments per line
-                    // 1. First line: from start.ch to end of line
-                    // 2. Middle lines: full line
-                    // 3. Last line: from 0 to end.ch
                     
                     let newText = "";
                     
@@ -308,19 +297,6 @@ export default class MyBlockPlugin extends Plugin {
                     editor.replaceSelection(`${marker}${selection}${marker}`);
                     
                     // Restore selection to cover the original text (excluding markers)
-                    // Current cursor is at the end of the inserted text
-                    const newHead = editor.getCursor('head');
-                    const newAnchor = editor.getCursor('anchor');
-                    
-                    // We want to select "selection"
-                    // Start: newHead - marker.length - selection.length
-                    // End: newHead - marker.length
-                    
-                    // Wait, replaceSelection puts cursor at end of replacement usually?
-                    // Or it preserves selection direction?
-                    // Obsidian API `replaceSelection` usually places cursor at end of inserted text.
-                    
-                    // Let's calculate manually based on original `start`
                     editor.setSelection(
                         { line: start.line, ch: start.ch + marker.length },
                         { line: end.line, ch: end.ch + marker.length }
@@ -352,16 +328,12 @@ export default class MyBlockPlugin extends Plugin {
                     editor.replaceRange('', { line: wordRange.from.line, ch: wordRange.from.ch - marker.length }, wordRange.from);
                     
                     // Restore cursor position relative to word
-                    // Original cursor: cursor.ch
-                    // New cursor: cursor.ch - marker.length
                     editor.setCursor({ line: cursor.line, ch: cursor.ch - marker.length });
                 } else {
                     // Not wrapped. Wrap it.
                     editor.replaceRange(`${marker}${wordText}${marker}`, wordRange.from, wordRange.to);
                     
                     // Restore cursor position relative to word
-                    // Original cursor: cursor.ch
-                    // New cursor: cursor.ch + marker.length
                     editor.setCursor({ line: cursor.line, ch: cursor.ch + marker.length });
                 }
             } else {
@@ -375,7 +347,7 @@ export default class MyBlockPlugin extends Plugin {
         }
     }
 
-    processPreviewMode(element: HTMLElement, context: MarkdownPostProcessorContext) {
+    processPreviewMode(element: HTMLElement, _context: MarkdownPostProcessorContext) {
         // 1. Inline Highlight
         if (this.settings.enableInlineHighlight) {
             processInlineHighlight(element, this.settings);

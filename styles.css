@@ -756,3 +756,8 @@
     border-bottom-right-radius: 8px !important;
     padding-bottom: 12px !important;
 }
+
+/* Utility to hide elements (replacing style.display = 'none') */
+.tinted-blocks-hidden {
+    display: none !important;
+}

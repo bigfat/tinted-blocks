@@ -1,7 +1,7 @@
 
-import { MyPluginSettings } from './settings';
+import { TintedBlocksSettings } from './settings';
 
-export function normalizeColor(raw: string, settings: MyPluginSettings): string {
+export function normalizeColor(raw: string, settings: TintedBlocksSettings): string {
     // 1. If empty -> Default
     if (!raw) {
         return settings.defaultColor;
@@ -95,8 +95,11 @@ export function removeTextFromEnd(element: HTMLElement, textToRemove: string) {
 
     const nodes: Node[] = [];
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
-    let node;
-    while(node = walker.nextNode()) nodes.push(node);
+    let node = walker.nextNode();
+    while(node) {
+        nodes.push(node);
+        node = walker.nextNode();
+    }
     
     let charsToCut = textToRemove.length;
     

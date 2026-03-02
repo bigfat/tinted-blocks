@@ -158,8 +158,8 @@ We wanted the highlighting commands to feel intuitive, similar to standard bold/
     - Before wrapping, we check if the selection (or word) is *already* wrapped.
     - **Smart Unwrapping**: If markers are detected, we remove them instead of double-wrapping (avoiding `::::text::::`).
 - **Cursor Preservation**:
-    - When wrapping a word (e.g., `text` -> `::text::`), the cursor position is shifted forward by the marker length (`+2`) to keep it relative to the content (e.g., remaining between 't' and 'e').
-    - When unwrapping, the cursor is shifted back (`-2`).
+    - **Wrapping**: When wrapping a word (e.g., `text` -> `::text::`), the cursor position is shifted forward by the marker length (`+2`) to keep it relative to the content (e.g., remaining between 't' and 'e').
+    - **Unwrapping**: When unwrapping, the cursor is shifted back (`-2`).
     - **Selection Restoration**: After wrapping/unwrapping a selection, we restore the selection range to cover the content, allowing for immediate follow-up edits.
 - **Exceptions**: We explicitly ignore empty double-colons `::::` (no color, no content) to prevent accidental highlighting of artifacts, while still supporting space highlighting `:: ::`.
 
@@ -233,3 +233,28 @@ We refactored the codebase to adhere to Obsidian's official plugin guidelines:
 -   **Cleanup**: Removed unused variables and imports.
 
 This ensures the plugin is maintainable, performant, and consistent with the Obsidian ecosystem.
+
+## 16. Local ESLint Configuration & Fixes (Post-Review)
+
+### The Goal
+To reproduce and fix the 140+ linting errors reported by the Obsidian review team locally, ensuring the plugin is fully compliant before resubmission.
+
+### Configuration
+-   **Plugin**: Installed `eslint-plugin-obsidianmd`.
+-   **Config**: Created `eslint.config.mjs` using the new Flat Config format, integrating `obsidianmd.configs.recommended`.
+-   **Types**: Configured TypeScript parser to handle strict type checking.
+
+### Key Fixes
+1.  **Strict Style Encapsulation**:
+    -   Replaced remaining `el.style.foo = 'bar'` calls with `el.addClass('foo')`.
+    -   Defined utility classes like `.tinted-block-hidden`, `.tinted-block-clamped` in `styles.css`.
+2.  **UI Text Standardization**:
+    -   Enforced Sentence case for all UI strings (e.g., "Block start marker" instead of "Block Start Marker").
+    -   Renamed "General" settings section to "General settings" to avoid generic headings.
+3.  **Code Hygiene**:
+    -   Fixed `prefer-const` warnings for variables that were never reassigned.
+    -   Removed unused function arguments and variables (or prefixed with `_`).
+    -   Resolved `no-explicit-any` warnings where possible.
+
+### Result
+`npm run lint` now returns **0 errors**, confirming the codebase is clean and compliant with Obsidian's strict standards.

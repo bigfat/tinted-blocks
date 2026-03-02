@@ -1,9 +1,9 @@
 
 import { foldService } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
-import { MyPluginSettings } from "./settings";
+import { TintedBlocksSettings } from "./settings";
 
-export const createBlockFoldService = (settings: MyPluginSettings) => foldService.of((state: EditorState, lineStart: number, lineEnd: number) => {
+export const createBlockFoldService = (settings: TintedBlocksSettings) => foldService.of((state: EditorState, lineStart: number, _lineEnd: number) => {
     const startMarker = settings.blockStartMarker;
     const endMarker = settings.blockEndMarker;
     

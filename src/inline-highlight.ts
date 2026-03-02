@@ -2,15 +2,15 @@
 import { RangeSetBuilder } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { MyPluginSettings } from './settings';
+import { TintedBlocksSettings } from './settings';
 
 // Interface to avoid circular dependency
 interface IPlugin {
-    settings: MyPluginSettings;
+    settings: TintedBlocksSettings;
 }
 
 // ============================================================
-// 2. 行内高亮 (Inline)
+// 2. Inline Highlighting
 // ============================================================
 
 export function createInlineHighlighter(plugin: IPlugin) {
@@ -122,6 +122,9 @@ export function createInlineHighlighter(plugin: IPlugin) {
                             class: `tinted-inline-marker tinted-inline-visible tinted-inline-end ${colorClass}` 
                         }));
                         
+                        // 4. If we have offset content, we need to hide the offset markers if we are showing the visible markers?
+                        // Actually, if we show markers, we just show them.
+                        
                     } else {
                         // Cursor outside (Live Preview only): Hide markers, show content
                         builder.add(startMarkerFrom, startMarkerTo, Decoration.replace({})); 
@@ -135,20 +138,21 @@ export function createInlineHighlighter(plugin: IPlugin) {
     }, { decorations: v => v.decorations });
 }
 
-export function processInlineHighlight(element: HTMLElement, settings: MyPluginSettings) {
+export function processInlineHighlight(element: HTMLElement, settings: TintedBlocksSettings) {
     const marker = settings.inlineMarker; // "::"
     const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Regex: ::(?:([rgbycm]):)?(.*?)::
     const regex = new RegExp(`${escapedMarker}(?:([rgbycm]):)?(.*?)${escapedMarker}`, 'g');
 
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
-    let node;
+    let node = walker.nextNode();
     const nodesToReplace: {node: Text, matches: RegExpMatchArray[]}[] = [];
     
-    while (node = walker.nextNode()) {
+    while (node) {
         // Skip if inside code block or inline code
         const parent = node.parentElement;
         if (parent && (parent.tagName === 'CODE' || parent.tagName === 'PRE' || parent.closest('code') || parent.closest('pre'))) {
+            node = walker.nextNode();
             continue;
         }
 
@@ -165,6 +169,7 @@ export function processInlineHighlight(element: HTMLElement, settings: MyPluginS
                  nodesToReplace.push({ node: node as Text, matches });
              }
         }
+        node = walker.nextNode();
     }
     
     // Perform replacements
@@ -174,7 +179,8 @@ export function processInlineHighlight(element: HTMLElement, settings: MyPluginS
          const text = node.textContent || "";
          
          for (const match of matches) {
-             const matchIndex = match.index!;
+             if (match.index === undefined) continue;
+             const matchIndex = match.index;
              
              // Add text before match
              if (matchIndex > lastIndex) {

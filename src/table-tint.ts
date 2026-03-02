@@ -1,15 +1,15 @@
 
 import { RangeSetBuilder } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
-import { MyPluginSettings } from './settings';
+import { TintedBlocksSettings } from './settings';
 
 // Interface to avoid circular dependency
 interface IPlugin {
-    settings: MyPluginSettings;
+    settings: TintedBlocksSettings;
 }
 
 // ============================================================
-// 4. 编辑模式 (Live Preview) - Table Cell Tinting
+// 4. Live Preview - Table Cell Tinting
 // ============================================================
 
 export function createTableTintPlugin(plugin: IPlugin) {
@@ -58,7 +58,7 @@ export function createTableTintPlugin(plugin: IPlugin) {
                                   this.applyTint(cell as HTMLElement, colorCode);
                                   
                                   // Handle Marker Hiding/Showing
-                                  this.handleMarkerWrapper(cell as HTMLElement, match[0], match[1] || "", match[2], activeCell === cell);
+                                  this.handleMarkerWrapper(cell as HTMLElement, match[2], activeCell === cell);
                               } else {
                                  // No marker found, clear tint
                                  this.clearTint(cell as HTMLElement);
@@ -71,7 +71,7 @@ export function createTableTintPlugin(plugin: IPlugin) {
              });
         }
         
-        handleMarkerWrapper(cell: HTMLElement, fullMatch: string, whitespace: string, marker: string, isActive: boolean) {
+        handleMarkerWrapper(cell: HTMLElement, marker: string, isActive: boolean) {
             // Check if wrapper exists
             let wrapper = cell.querySelector('.tinted-cell-marker-wrapper') as HTMLElement;
             
@@ -258,7 +258,7 @@ export function createTableMarkerHighlighter(plugin: IPlugin) {
     }, { decorations: v => v.decorations });
 }
 
-export function processTableTinting(element: HTMLElement, settings: MyPluginSettings) {
+export function processTableTinting(element: HTMLElement, _settings: TintedBlocksSettings) {
     // Find all tables in the element
     const tables = element.querySelectorAll('table');
     tables.forEach(table => {
