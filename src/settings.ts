@@ -61,10 +61,12 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         link.onclick = (e) => {
             e.preventDefault();
             // Access internal API to open settings tab
-            // @ts-expect-error Accessing internal API
-            if (this.app.setting && this.app.setting.openTabById) {
-                // @ts-expect-error Accessing internal API
-                this.app.setting.openTabById('hotkeys');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+            const app = this.app as any;
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            if (app.setting && app.setting.openTabById) {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+                app.setting.openTabById('hotkeys');
             }
         };
 		helpDesc.append('.');
@@ -139,12 +141,12 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
 				});
                 
                 // Use explicit type for event to satisfy linter if needed, or rely on type inference
-                text.inputEl.addEventListener('blur', async () => {
+                text.inputEl.addEventListener('blur', () => {
                     if (!this.plugin.settings.blockStartMarker) {
                         this.plugin.settings.blockStartMarker = DEFAULT_SETTINGS.blockStartMarker;
                         text.setValue(DEFAULT_SETTINGS.blockStartMarker);
                         validateMarkers();
-                        await this.plugin.saveSettings();
+                        void this.plugin.saveSettings();
                     }
                 });
             });
@@ -162,12 +164,12 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 
-                text.inputEl.addEventListener('blur', async () => {
+                text.inputEl.addEventListener('blur', () => {
                     if (!this.plugin.settings.blockEndMarker) {
                         this.plugin.settings.blockEndMarker = DEFAULT_SETTINGS.blockEndMarker;
                         text.setValue(DEFAULT_SETTINGS.blockEndMarker);
                         validateMarkers();
-                        await this.plugin.saveSettings();
+                        void this.plugin.saveSettings();
                     }
                 });
             });
@@ -324,8 +326,9 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         tableDesc.append('Add color to table cells. Syntax: ');
         tableDesc.createEl('code', {text: '| :r: content |'});
         tableDesc.append(document.createElement('br'));
-        // eslint-disable-next-line obsidianmd/ui/sentence-case
-        tableDesc.createEl('span', {text: '⚠️ Alpha feature: this feature relies on internal Obsidian DOM structures and may break with future updates.', cls: 'tinted-blocks-warning'});
+        const warningSpan = tableDesc.createEl('span', {cls: 'tinted-blocks-warning'});
+        warningSpan.createSpan({text: '⚠️ '});
+        warningSpan.createSpan({text: 'This alpha feature relies on internal Obsidian structures and may break with future updates.'});
 
 		new Setting(detailsDiv)
 			.setName('How to use')

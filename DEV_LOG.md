@@ -272,3 +272,21 @@ To reproduce and fix the 140+ linting errors reported by the Obsidian review tea
 - **Fix**: Simplified the collapse strategy for multi-element blocks.
     - **Strategy**: Instead of clamping, we now **hide all siblings** (`.tinted-block-hidden`) except for the **Start Marker Line** (which contains the header/title).
     - **Result**: Collapsing a block now cleanly shows *only* the header line, regardless of what complex content follows. This provides a consistent, clean UI that matches user expectations for a "folded" state.
+
+## 18. Strict ESLint Compliance (Type-Checked)
+
+### The Issue
+Official Obsidian review bots found errors (e.g., "Unnecessary assertion", "Promise returned in void argument") that our local `npm run lint` passed.
+
+### Cause
+Our local `eslint.config.mjs` was using `tseslint.configs.recommended`, which does **not** include rules that require type information (because they are slower). The official bot uses stricter, type-aware rules.
+
+### Solution
+-   Updated `eslint.config.mjs` to use `...tseslint.configs.recommendedTypeChecked`.
+-   This successfully reproduced the errors locally.
+
+### Fixes
+-   **Unnecessary Assertion**: Removed `!` from `element.parentElement!` in `block-tint.ts` since strict null checks proved it redundant.
+-   **Promise in Void**: Wrapped async event listeners in `settings.ts` with `void` or IIFE to strictly adhere to `addEventListener` signature.
+-   **Sentence Case**: Adjusted warning text to strictly follow sentence case (e.g., handling of emojis and capitalization).
+-   **Unsafe Assignments**: Added explicit `eslint-disable` comments for unavoidable `any` casting when interacting with internal Obsidian APIs (like `app.setting`).

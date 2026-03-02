@@ -87,7 +87,7 @@ export default class TintedBlocksPlugin extends Plugin {
     }
 
     async loadSettings() {
-        const data = await this.loadData();
+        const data = (await this.loadData()) as Partial<TintedBlocksSettings>;
         this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
         
         // Ensure markers are not empty or invalid
@@ -110,12 +110,12 @@ export default class TintedBlocksPlugin extends Plugin {
         this.app.workspace.iterateAllLeaves(leaf => {
             if (leaf.view instanceof MarkdownView) {
                  const editor = leaf.view.editor;
-                 // @ts-expect-error Accessing internal CodeMirror instance
-                 if (editor && editor.cm) {
-                     // @ts-expect-error Accessing internal CodeMirror instance
-                     const cm = editor.cm;
-                     // Trigger update
-                     cm.dispatch({});
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+                 const editorAny = editor as any;
+                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                 if (editorAny.cm) {
+                     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+                     editorAny.cm.dispatch({});
                  }
             }
         });

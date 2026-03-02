@@ -204,7 +204,7 @@ function queueWrapping(element: HTMLElement, settings: TintedBlocksSettings) {
         let attempts = 0;
         const checkParent = () => {
             if (element.parentElement) {
-                setupObserver(element.parentElement!, settings);
+                setupObserver(element.parentElement, settings);
             } else if (attempts < 10) {
                 attempts++;
                 window.setTimeout(checkParent, 20);
