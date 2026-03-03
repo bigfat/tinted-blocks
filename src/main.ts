@@ -5,6 +5,7 @@ import { createBlockTinter, processBlockTint, cleanupBlockTintObservers } from '
 import { createInlineHighlighter, processInlineHighlight } from './inline-highlight';
 import { createTableTintPlugin, createTableMarkerHighlighter, processTableTinting } from './table-tint';
 import { createBlockFoldService } from './folding';
+import { EditorWithCM } from './types';
 
 export default class TintedBlocksPlugin extends Plugin {
     settings: TintedBlocksSettings;
@@ -110,12 +111,9 @@ export default class TintedBlocksPlugin extends Plugin {
         this.app.workspace.iterateAllLeaves(leaf => {
             if (leaf.view instanceof MarkdownView) {
                  const editor = leaf.view.editor;
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-                 const editorAny = editor as any;
-                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                 if (editorAny.cm) {
-                     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-                     editorAny.cm.dispatch({});
+                 const editorWithCM = editor as unknown as EditorWithCM;
+                 if (editorWithCM.cm) {
+                     editorWithCM.cm.dispatch({});
                  }
             }
         });

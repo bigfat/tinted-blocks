@@ -1,6 +1,7 @@
 
 import { App, PluginSettingTab, Setting, TextComponent, ColorComponent } from "obsidian";
 import TintedBlocksPlugin from "./main";
+import { InternalApp } from "./types";
 
 export interface TintedBlocksSettings {
 	enableBlockTint: boolean;
@@ -61,11 +62,8 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         link.onclick = (e) => {
             e.preventDefault();
             // Access internal API to open settings tab
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-            const app = this.app as any;
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            const app = this.app as InternalApp;
             if (app.setting && app.setting.openTabById) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
                 app.setting.openTabById('hotkeys');
             }
         };
@@ -278,7 +276,9 @@ export class TintedBlocksSettingTab extends PluginSettingTab {
         inlineUsageDesc.append('Highlight text inline. Syntax: ');
         inlineUsageDesc.createEl('code', {text: `${this.plugin.settings.inlineMarker}text${this.plugin.settings.inlineMarker}`});
         inlineUsageDesc.append(' or ');
-        inlineUsageDesc.createEl('code', {text: `${this.plugin.settings.inlineMarker}red:text${this.plugin.settings.inlineMarker}`});
+        inlineUsageDesc.createEl('code', {text: `${this.plugin.settings.inlineMarker}g:text${this.plugin.settings.inlineMarker}`});
+        inlineUsageDesc.append(document.createElement('br'));
+        inlineUsageDesc.append('Supported short color name: r, g, b, c, m, y');
 
 		new Setting(detailsDiv)
 			.setName('How to use')

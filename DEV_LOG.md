@@ -10,10 +10,6 @@ Obsidian's Reading View does not render a document as a single static HTML struc
 - It may update individual blocks without re-rendering the entire section.
 - Content is flattened: A block starting with `::>blue` and ending with `<::` is rendered as multiple sibling elements (e.g., `div.el-p`), not nested inside a container.
 
-### Failed Attempt: Wrapper Div
-Initially, we tried to physically move these sibling elements into a new `div.tinted-block-container`.
-- **Why it failed**: Obsidian's virtual DOM / diffing algorithm gets confused when elements are moved. When switching between Editing and Reading modes, or when updating content, Obsidian would "lose" the elements or reset them, causing styles to flicker or disappear.
-
 ### Successful Solution: Class-Based Styling & MutationObserver
 Instead of changing the DOM structure, we applied classes to the existing elements to simulate a block.
 - **`tinted-block-item`**: Applied to all elements in the block. Sets background color and removes margins.
@@ -88,7 +84,6 @@ When a user edits text inside a block, Obsidian re-renders that specific paragra
     - When a marker like `:r:` is found in a table cell, we physically **wrap it in a `<span>`** (e.g., `<span class="tinted-cell-marker-wrapper">`).
     - **Hiding**: By default, this span is styled with `display: inline-block; width: 0; overflow: hidden;`. This effectively removes it from the visual layout.
     - **Showing**: When the cursor enters the cell (detected via `window.getSelection()`), we add an active class that resets styles to `display: inline; width: auto; opacity: 0.67`, making it visible for editing.
-    - **Risk**: Modifying the DOM managed by CodeMirror is generally risky (can confuse the editor). However, for specific localized changes inside a Table Widget (which is a "block" to CodeMirror), this approach proved to be the only robust way to achieve "zero-width hiding" in Live Preview.
     - **Risk**: Modifying the DOM managed by CodeMirror is generally risky (can confuse the editor). However, for specific localized changes inside a Table Widget (which is a "block" to CodeMirror), this approach proved to be the only robust way to achieve "zero-width hiding" in Live Preview.
 
 ## 9. Advanced Live Preview Table Handling
@@ -273,20 +268,16 @@ To reproduce and fix the 140+ linting errors reported by the Obsidian review tea
     - **Strategy**: Instead of clamping, we now **hide all siblings** (`.tinted-block-hidden`) except for the **Start Marker Line** (which contains the header/title).
     - **Result**: Collapsing a block now cleanly shows *only* the header line, regardless of what complex content follows. This provides a consistent, clean UI that matches user expectations for a "folded" state.
 
-## 18. Strict ESLint Compliance (Type-Checked)
+## 18. Strict ESLint Compliance & Type Safety
 
 ### The Issue
-Official Obsidian review bots found errors (e.g., "Unnecessary assertion", "Promise returned in void argument") that our local `npm run lint` passed.
+Official Obsidian review bots flagged our previous submission for using `eslint-disable` and `any` to bypass type checks, labeling it as "masking issues".
 
-### Cause
-Our local `eslint.config.mjs` was using `tseslint.configs.recommended`, which does **not** include rules that require type information (because they are slower). The official bot uses stricter, type-aware rules.
+### Root Cause
+We attempted to quick-fix TypeScript errors related to internal Obsidian APIs (like `app.setting`) by casting to `any` and suppressing the linter, rather than defining proper types.
 
-### Solution
--   Updated `eslint.config.mjs` to use `...tseslint.configs.recommendedTypeChecked`.
--   This successfully reproduced the errors locally.
-
-### Fixes
--   **Unnecessary Assertion**: Removed `!` from `element.parentElement!` in `block-tint.ts` since strict null checks proved it redundant.
--   **Promise in Void**: Wrapped async event listeners in `settings.ts` with `void` or IIFE to strictly adhere to `addEventListener` signature.
--   **Sentence Case**: Adjusted warning text to strictly follow sentence case (e.g., handling of emojis and capitalization).
--   **Unsafe Assignments**: Added explicit `eslint-disable` comments for unavoidable `any` casting when interacting with internal Obsidian APIs (like `app.setting`).
+### Solution: Define Interfaces, Don't Disable Rules
+-   **Anti-Pattern Removal**: Removed all `eslint-disable` directives and `as any` casts.
+-   **Type Definitions**: Created `src/types.ts` to explicitly define internal APIs we consume (e.g., `InternalApp` with `setting.openTabById`, `EditorWithCM` with `cm.dispatch`).
+-   **Type Safety**: Updated code to use these interfaces (e.g., `const app = this.app as InternalApp`).
+-   **Outcome**: The code now passes strict type-aware linting (`recommendedTypeChecked`) naturally, without cheats. This aligns with Obsidian's requirement for genuine type safety.

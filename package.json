@@ -1,6 +1,6 @@
 {
 	"name": "tinted-blocks",
-	"version": "0.6.0",
+	"version": "0.6.2",
 	"description": "Tinted Blocks: add background color to blocks in Obsidian.",
 	"main": "main.js",
 	"type": "module",

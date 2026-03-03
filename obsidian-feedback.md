@@ -2,17 +2,23 @@ Thank you for your submission, an automated scan of your plugin code's revealed 
 
 ### Required
 
-[[1]](https://github.com/bigfat/tinted-blocks/blob/dd7110a8e648f16a099ccf1c5129b4e70da2ef09/src/block-tint.ts#L207-L207)  
-This assertion is unnecessary since it does not change the type of the expression.
-
-[[1]](https://github.com/bigfat/tinted-blocks/blob/dd7110a8e648f16a099ccf1c5129b4e70da2ef09/src/settings.ts#L142-L149)[[2]](https://github.com/bigfat/tinted-blocks/blob/dd7110a8e648f16a099ccf1c5129b4e70da2ef09/src/settings.ts#L165-L172)  
-Promise returned in function argument where a void return was expected.
-
-[[1]](https://github.com/bigfat/tinted-blocks/blob/dd7110a8e648f16a099ccf1c5129b4e70da2ef09/src/settings.ts#L327-L327)  
+[[1]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L113-L113)[[2]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L115-L115)[[3]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L117-L117)[[4]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L64-L64)[[5]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L66-L66)[[6]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L68-L68)  
 Unexpected undescribed directive comment. Include descriptions to explain why the comment is necessary.
 
-[[1]](https://github.com/bigfat/tinted-blocks/blob/dd7110a8e648f16a099ccf1c5129b4e70da2ef09/src/settings.ts#L327-L327)  
-Disabling 'obsidianmd/ui/sentence-case' is not allowed.
+[[1]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L113)[[2]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L64)  
+Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unsafe-assignment').
+
+[[1]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L113-L113)[[2]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L64-L64)  
+Disabling '@typescript-eslint/no-explicit-any' is not allowed.
+
+[[1]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L115)[[2]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L66)  
+Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unsafe-member-access').
+
+[[1]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/main.ts#L117)  
+Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unsafe-member-access' or '@typescript-eslint/no-unsafe-call').
+
+[[1]](https://github.com/bigfat/tinted-blocks/blob/a0265d70ce88dad71744e3841bc746da562c21e4/src/settings.ts#L68)  
+Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unsafe-call' or '@typescript-eslint/no-unsafe-member-access').
 
 ---
 
